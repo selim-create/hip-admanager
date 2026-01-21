@@ -24,7 +24,9 @@ class HIP_Ad_Slot {
 	 * Constructor
 	 */
 	public function __construct() {
-		add_action( 'init', array( $this, 'register_post_type' ), 0 );
+		// Register CPT directly (called during init hook from HIP_Ad_Manager::init)
+		self::register_post_type();
+		
 		add_action( 'add_meta_boxes', array( $this, 'add_meta_boxes' ) );
 		add_action( 'save_post_' . self::POST_TYPE, array( $this, 'save_meta_boxes' ), 10, 2 );
 	}
