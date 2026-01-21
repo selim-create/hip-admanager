@@ -99,6 +99,30 @@ class HIP_Ad_REST_API {
 				'permission_callback' => '__return_true',
 			)
 		);
+
+		// ads.txt endpoint
+		register_rest_route(
+			self::NAMESPACE,
+			'/ads-txt',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'get_ads_txt' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		// Clear cache endpoint
+		register_rest_route(
+			self::NAMESPACE,
+			'/cache/clear',
+			array(
+				'methods'             => 'POST',
+				'callback'            => array( $this, 'clear_cache' ),
+				'permission_callback' => function() {
+					return current_user_can( 'manage_options' );
+				},
+			)
+		);
 	}
 
 	/**
@@ -116,6 +140,14 @@ class HIP_Ad_REST_API {
 			'enableLazyLoad'      => isset( $settings['enable_lazy_load'] ) ? (bool) $settings['enable_lazy_load'] : true,
 			'enableSingleRequest' => isset( $settings['enable_single_request'] ) ? (bool) $settings['enable_single_request'] : true,
 			'globalTargeting'     => isset( $settings['global_targeting'] ) ? json_decode( $settings['global_targeting'], true ) : new stdClass(),
+			'lazyLoadConfig'      => array(
+				'enabled'            => isset( $settings['enable_lazy_load'] ) ? (bool) $settings['enable_lazy_load'] : true,
+				'strategy'           => 'intersection',
+				'fetchMarginPercent' => 200,
+				'renderMarginPercent' => 100,
+				'mobileScaling'      => 2.0,
+				'idleTimeout'        => 200,
+			),
 		);
 
 		return new WP_REST_Response( $config, 200 );
@@ -128,8 +160,65 @@ class HIP_Ad_REST_API {
 	 * @return WP_REST_Response
 	 */
 	public function get_slots( $request ) {
-		$settings = get_option( 'hip_ad_manager_settings', array() );
 		$params = $request->get_params();
+		
+		// Check cache first
+		$slots_data = $this->get_cached_slots( $params );
+		
+		if ( $slots_data !== false ) {
+			return new WP_REST_Response( $slots_data, 200, array(
+				'Cache-Control' => 'public, max-age=3600',
+				'X-Cache'       => 'HIT',
+			) );
+		}
+		
+		// Fetch from database
+		$slots_data = $this->fetch_slots_from_db( $params );
+		
+		// Cache the result
+		$this->cache_slots( $params, $slots_data );
+		
+		return new WP_REST_Response( $slots_data, 200, array(
+			'Cache-Control' => 'public, max-age=3600',
+			'X-Cache'       => 'MISS',
+			'ETag'          => md5( wp_json_encode( $slots_data ) ),
+		) );
+	}
+	
+	/**
+	 * Get cached slots
+	 *
+	 * @param array $params
+	 * @return array|false
+	 */
+	private function get_cached_slots( $params ) {
+		$cache_key  = 'hip_ad_slots_' . md5( serialize( $params ) );
+		$cache_time = apply_filters( 'hip_ad_cache_duration', HOUR_IN_SECONDS );
+		
+		return get_transient( $cache_key );
+	}
+	
+	/**
+	 * Cache slots data
+	 *
+	 * @param array $params
+	 * @param array $data
+	 */
+	private function cache_slots( $params, $data ) {
+		$cache_key  = 'hip_ad_slots_' . md5( serialize( $params ) );
+		$cache_time = apply_filters( 'hip_ad_cache_duration', HOUR_IN_SECONDS );
+		
+		set_transient( $cache_key, $data, $cache_time );
+	}
+	
+	/**
+	 * Fetch slots from database
+	 *
+	 * @param array $params
+	 * @return array
+	 */
+	private function fetch_slots_from_db( $params ) {
+		$settings = get_option( 'hip_ad_manager_settings', array() );
 
 		// Build query args
 		$query_args = array(
@@ -178,15 +267,17 @@ class HIP_Ad_REST_API {
 			$slots[] = HIP_Ad_Slot::format_slot_data( $post );
 		}
 
-		$response = array(
+		return array(
 			'networkCode'         => isset( $settings['network_code'] ) ? $settings['network_code'] : '',
 			'enableLazyLoad'      => isset( $settings['enable_lazy_load'] ) ? (bool) $settings['enable_lazy_load'] : true,
 			'enableSingleRequest' => isset( $settings['enable_single_request'] ) ? (bool) $settings['enable_single_request'] : true,
-			'globalTargeting'     => isset( $settings['global_targeting'] ) ? json_decode( $settings['global_targeting'], true ) : new stdClass(),
+			'globalTargeting'     => array(
+				'site' => isset( $settings['site_name'] ) ? $settings['site_name'] : '',
+				'env'  => wp_get_environment_type(),
+			),
+			'dynamicTargetingKeys' => array( 'category', 'tags', 'author', 'postType', 'customKey' ),
 			'slots'               => $slots,
 		);
-
-		return new WP_REST_Response( $response, 200 );
 	}
 
 	/**
@@ -221,6 +312,41 @@ class HIP_Ad_REST_API {
 			array(
 				'success' => true,
 				'message' => __( 'Tracked successfully', 'hip-admanager' ),
+			),
+			200
+		);
+	}
+	
+	/**
+	 * Get ads.txt content
+	 *
+	 * @param WP_REST_Request $request
+	 * @return WP_REST_Response
+	 */
+	public function get_ads_txt( $request ) {
+		$content = get_option( 'hip_ad_ads_txt_content', '' );
+		
+		return new WP_REST_Response( $content, 200, array(
+			'Content-Type' => 'text/plain; charset=utf-8',
+		) );
+	}
+	
+	/**
+	 * Clear cache endpoint
+	 *
+	 * @param WP_REST_Request $request
+	 * @return WP_REST_Response
+	 */
+	public function clear_cache( $request ) {
+		global $wpdb;
+		
+		// Delete all transients with our prefix
+		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_hip_ad_slots_%' OR option_name LIKE '_transient_timeout_hip_ad_slots_%'" );
+		
+		return new WP_REST_Response(
+			array(
+				'success' => true,
+				'message' => __( 'Cache cleared successfully', 'hip-admanager' ),
 			),
 			200
 		);

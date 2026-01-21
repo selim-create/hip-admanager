@@ -1,0 +1,33 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "hip-admanager/ad-slot",
+	"title": "Ad Slot",
+	"category": "widgets",
+	"icon": "megaphone",
+	"description": "Insert an ad slot into your content",
+	"keywords": ["ad", "advertisement", "gam", "google"],
+	"version": "1.0.0",
+	"textdomain": "hip-admanager",
+	"attributes": {
+		"slotId": {
+			"type": "string",
+			"default": ""
+		},
+		"placement": {
+			"type": "string",
+			"default": "in-content"
+		},
+		"alignment": {
+			"type": "string",
+			"default": "center"
+		}
+	},
+	"supports": {
+		"align": ["wide", "full", "center"],
+		"html": false
+	},
+	"editorScript": "file:./index.js",
+	"editorStyle": "file:./editor.css",
+	"style": "file:./style.css"
+}

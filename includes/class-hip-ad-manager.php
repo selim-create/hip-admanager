@@ -93,6 +93,7 @@ class HIP_Ad_Manager {
 		require_once HIP_AD_MANAGER_PLUGIN_DIR . 'includes/class-hip-ad-settings.php';
 		require_once HIP_AD_MANAGER_PLUGIN_DIR . 'includes/class-hip-ad-importer.php';
 		require_once HIP_AD_MANAGER_PLUGIN_DIR . 'includes/class-hip-ad-targeting.php';
+		require_once HIP_AD_MANAGER_PLUGIN_DIR . 'includes/class-hip-ad-blocks.php';
 
 		if ( is_admin() ) {
 			require_once HIP_AD_MANAGER_PLUGIN_DIR . 'admin/class-hip-ad-admin.php';
@@ -105,6 +106,9 @@ class HIP_Ad_Manager {
 	private function init_hooks() {
 		add_action( 'init', array( $this, 'init' ) );
 		add_action( 'rest_api_init', array( $this, 'init_rest_api' ) );
+		
+		// Clear cache when slot is saved
+		add_action( 'save_post_' . HIP_Ad_Slot::POST_TYPE, array( $this, 'clear_slots_cache' ), 10, 2 );
 	}
 
 	/**
@@ -123,6 +127,9 @@ class HIP_Ad_Manager {
 		// Initialize importer
 		$this->importer = new HIP_Ad_Importer();
 		
+		// Initialize blocks
+		$this->blocks = new HIP_Ad_Blocks();
+		
 		// Initialize admin panel
 		if ( is_admin() ) {
 			$this->admin = new HIP_Ad_Admin();
@@ -137,5 +144,18 @@ class HIP_Ad_Manager {
 	 */
 	public function init_rest_api() {
 		$this->rest_api = new HIP_Ad_REST_API();
+	}
+	
+	/**
+	 * Clear slots cache when a slot is saved
+	 *
+	 * @param int     $post_id
+	 * @param WP_Post $post
+	 */
+	public function clear_slots_cache( $post_id, $post ) {
+		global $wpdb;
+		
+		// Delete all transients with our prefix
+		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_hip_ad_slots_%' OR option_name LIKE '_transient_timeout_hip_ad_slots_%'" );
 	}
 }
