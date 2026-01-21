@@ -138,12 +138,21 @@ class HIP_Ad_Admin {
 			$settings['site_name'] = isset( $_POST['site_name'] ) ? sanitize_text_field( $_POST['site_name'] ) : '';
 			$settings['enable_lazy_load'] = isset( $_POST['enable_lazy_load'] ) ? 1 : 0;
 			$settings['enable_single_request'] = isset( $_POST['enable_single_request'] ) ? 1 : 0;
+			$settings['debug_mode'] = isset( $_POST['debug_mode'] ) ? 1 : 0;
 			
 			if ( isset( $_POST['global_targeting'] ) ) {
 				$targeting = json_decode( stripslashes( $_POST['global_targeting'] ), true );
 				if ( json_last_error() === JSON_ERROR_NONE ) {
 					$settings['global_targeting'] = wp_json_encode( $targeting );
 				}
+			}
+			
+			if ( isset( $_POST['cache_duration'] ) ) {
+				$settings['cache_duration'] = absint( $_POST['cache_duration'] );
+			}
+			
+			if ( isset( $_POST['ads_txt_content'] ) ) {
+				update_option( 'hip_ad_ads_txt_content', sanitize_textarea_field( $_POST['ads_txt_content'] ) );
 			}
 			
 			update_option( HIP_Ad_Settings::OPTION_NAME, $settings );

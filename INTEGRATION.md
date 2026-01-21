@@ -334,6 +334,133 @@ export default function AdsTxt() {
 
 ---
 
+## Debug Mode
+
+Debug mode helps AdOps teams verify ad placement and troubleshoot integration issues. When enabled from the admin panel, API responses include additional debug information.
+
+### Enabling Debug Mode
+
+1. Navigate to **HIP Ad Manager** → **Settings**
+2. Under **General Settings**, check **Enable Debug Mode**
+3. Save settings
+
+### API Response (Debug Mode Enabled)
+
+When debug mode is enabled, the `/wp-json/hip-ads/v1/config` endpoint includes:
+
+```json
+{
+  "networkCode": "273585429",
+  "siteName": "kidsgourmet",
+  "enableLazyLoad": true,
+  "enableSingleRequest": true,
+  "debug": {
+    "enabled": true,
+    "timestamp": "2024-01-21T10:30:00+03:00",
+    "cacheStatus": "HIT",
+    "phpVersion": "8.2.0",
+    "wpVersion": "6.4",
+    "pluginVersion": "1.0.0"
+  }
+}
+```
+
+The `/wp-json/hip-ads/v1/slots` endpoint includes debug info in the main response and for each slot:
+
+```json
+{
+  "debug": {
+    "enabled": true,
+    "timestamp": "2024-01-21T10:30:00+03:00",
+    "cacheStatus": "HIT",
+    "phpVersion": "8.2.0",
+    "wpVersion": "6.4",
+    "pluginVersion": "1.0.0"
+  },
+  "slots": [
+    {
+      "id": 123,
+      "name": "Header Banner",
+      "slotId": "header-leaderboard",
+      "adUnitPath": "/273585429/header",
+      "sizes": [[970, 250], [728, 90]],
+      "debug": {
+        "postId": 123,
+        "postStatus": "publish",
+        "created": "2024-01-15 10:00:00",
+        "modified": "2024-01-20 15:30:00",
+        "sizesRaw": "[[970,250],[728,90]]",
+        "filteredMeta": {
+          "gam_slot_id": "header-leaderboard",
+          "gam_placement": "header",
+          "gam_status": "active"
+        },
+        "sizeLabel": "970x250, 728x90",
+        "displayInfo": "Slot ID: header-leaderboard | Sizes: 970x250, 728x90 | Placement: header"
+      }
+    }
+  ]
+}
+```
+
+### Frontend Debug Component (Next.js Example)
+
+```tsx
+interface AdSlotProps {
+  slot: AdSlotType;
+}
+
+export function AdSlot({ slot }: AdSlotProps) {
+  const { config } = useAds();
+  const isDebugMode = config?.debug?.enabled;
+  
+  if (isDebugMode) {
+    // Debug mode: Display placeholder box with slot details
+    return (
+      <div
+        style={{
+          minHeight: `${slot.minHeight}px`,
+          backgroundColor: '#f0f0f0',
+          border: '2px dashed #666',
+          padding: '20px',
+          textAlign: 'center',
+          fontFamily: 'monospace'
+        }}
+      >
+        <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '10px' }}>
+          DEBUG MODE
+        </div>
+        <div style={{ fontSize: '12px' }}>
+          {slot.debug?.displayInfo}
+        </div>
+        <div style={{ fontSize: '10px', marginTop: '5px', color: '#666' }}>
+          Post ID: {slot.debug?.postId} | Min Height: {slot.minHeight}px
+        </div>
+      </div>
+    );
+  }
+  
+  // Normal ad rendering
+  return <GoogleAd slot={slot} />;
+}
+```
+
+### Debug Mode Use Cases
+
+1. **Ad Placement Testing**: AdOps team can visually verify that ads appear in the correct locations on the page
+2. **Size Validation**: Each placeholder shows which ad sizes are configured for that slot
+3. **API Response Inspection**: Network tab shows all slot details and metadata for troubleshooting
+4. **Cache Debugging**: The `cacheStatus` field helps verify whether responses are being served from cache
+5. **Integration Verification**: Confirm that all required slots are loading and properly configured
+
+### Security Note
+
+Debug mode should only be enabled in development or staging environments. In production, debug information could expose internal implementation details. Always disable debug mode before launching to production.
+
+**Important**: Debug information is filtered to only include GAM-specific metadata fields. Sensitive WordPress metadata (like custom fields unrelated to ad management) is excluded from debug responses for security.
+
+---
+
 ## Framework Examples
 
 ### Next.js with Device Detection

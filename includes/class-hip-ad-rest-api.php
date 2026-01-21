@@ -133,6 +133,7 @@ class HIP_Ad_REST_API {
 	 */
 	public function get_config( $request ) {
 		$settings = get_option( 'hip_ad_manager_settings', array() );
+		$debug_mode = isset( $settings['debug_mode'] ) ? (bool) $settings['debug_mode'] : false;
 
 		$config = array(
 			'networkCode'         => isset( $settings['network_code'] ) ? $settings['network_code'] : '',
@@ -149,6 +150,18 @@ class HIP_Ad_REST_API {
 				'idleTimeout'        => 200,
 			),
 		);
+
+		// Add debug information if debug mode is enabled
+		if ( $debug_mode ) {
+			$config['debug'] = array(
+				'enabled'       => true,
+				'timestamp'     => current_time( 'c' ),
+				'cacheStatus'   => $this->get_cache_status(),
+				'phpVersion'    => PHP_VERSION,
+				'wpVersion'     => get_bloginfo( 'version' ),
+				'pluginVersion' => HIP_AD_MANAGER_VERSION,
+			);
+		}
 
 		return new WP_REST_Response( $config, 200 );
 	}
@@ -218,6 +231,7 @@ class HIP_Ad_REST_API {
 	 */
 	private function fetch_slots_from_db( $params ) {
 		$settings = get_option( 'hip_ad_manager_settings', array() );
+		$debug_mode = isset( $settings['debug_mode'] ) ? (bool) $settings['debug_mode'] : false;
 
 		// Build query args
 		$query_args = array(
@@ -263,10 +277,17 @@ class HIP_Ad_REST_API {
 		$slots = array();
 
 		foreach ( $query->posts as $post ) {
-			$slots[] = HIP_Ad_Slot::format_slot_data( $post );
+			$slot_data = HIP_Ad_Slot::format_slot_data( $post );
+			
+			// Add debug information if debug mode is enabled
+			if ( $debug_mode ) {
+				$slot_data['debug'] = $this->get_slot_debug_info( $post, $slot_data );
+			}
+			
+			$slots[] = $slot_data;
 		}
 
-		return array(
+		$response = array(
 			'networkCode'         => isset( $settings['network_code'] ) ? $settings['network_code'] : '',
 			'enableLazyLoad'      => isset( $settings['enable_lazy_load'] ) ? (bool) $settings['enable_lazy_load'] : true,
 			'enableSingleRequest' => isset( $settings['enable_single_request'] ) ? (bool) $settings['enable_single_request'] : true,
@@ -277,6 +298,20 @@ class HIP_Ad_REST_API {
 			'dynamicTargetingKeys' => array( 'category', 'tags', 'author', 'postType', 'customKey' ),
 			'slots'               => $slots,
 		);
+
+		// Add debug information if debug mode is enabled
+		if ( $debug_mode ) {
+			$response['debug'] = array(
+				'enabled'       => true,
+				'timestamp'     => current_time( 'c' ),
+				'cacheStatus'   => $this->get_cache_status(),
+				'phpVersion'    => PHP_VERSION,
+				'wpVersion'     => get_bloginfo( 'version' ),
+				'pluginVersion' => HIP_AD_MANAGER_VERSION,
+			);
+		}
+
+		return $response;
 	}
 
 	/**
@@ -372,5 +407,107 @@ class HIP_Ad_REST_API {
 				$wpdb->esc_like( '_transient_timeout_hip_ad_slots_' ) . '%'
 			)
 		);
+	}
+
+	/**
+	 * Get cache status
+	 * Determines if cache is being used based on transient existence
+	 *
+	 * @return string 'HIT' or 'MISS'
+	 */
+	private function get_cache_status() {
+		// Use a lightweight check - just see if we have any cached result
+		// This avoids counting all transients on every request
+		$cache_key = 'hip_ad_cache_check';
+		$cached = get_transient( $cache_key );
+		
+		if ( false !== $cached ) {
+			return 'HIT';
+		}
+		
+		// Set a short-lived transient to track cache status
+		set_transient( $cache_key, 1, 60 ); // 60 seconds
+		return 'MISS';
+	}
+
+	/**
+	 * Get debug information for a slot
+	 *
+	 * @param WP_Post $post The slot post object
+	 * @param array   $slot_data The formatted slot data
+	 * @return array Debug information
+	 */
+	private function get_slot_debug_info( $post, $slot_data ) {
+		$sizes_raw = get_post_meta( $post->ID, 'gam_sizes', true );
+		
+		// Get all metadata but filter to only GAM-related fields for security
+		// This prevents exposing potentially sensitive metadata
+		$all_meta = get_post_meta( $post->ID );
+		$filtered_meta = array();
+		
+		// Only include GAM-specific metadata fields
+		$allowed_meta_keys = array(
+			'gam_slot_id',
+			'gam_ad_unit_path',
+			'gam_sizes',
+			'gam_size_mappings',
+			'gam_targeting',
+			'gam_placement',
+			'gam_device',
+			'gam_lazy_load',
+			'gam_display_rules',
+			'gam_status',
+			'gam_priority',
+			'_hip_ad_refresh_enabled',
+			'_hip_ad_refresh_interval',
+			'_hip_ad_max_refreshes',
+		);
+		
+		foreach ( $allowed_meta_keys as $key ) {
+			if ( isset( $all_meta[ $key ] ) ) {
+				// Get the first value from the meta array
+				$filtered_meta[ $key ] = $all_meta[ $key ][0];
+			}
+		}
+		
+		return array(
+			'postId'      => $post->ID,
+			'postStatus'  => $post->post_status,
+			'created'     => $post->post_date,
+			'modified'    => $post->post_modified,
+			'sizesRaw'    => $sizes_raw,
+			'filteredMeta' => $filtered_meta,
+			'sizeLabel'   => $this->get_size_label( $slot_data['sizes'] ),
+			'displayInfo' => sprintf(
+				'Slot ID: %s | Sizes: %s | Placement: %s',
+				$slot_data['slotId'],
+				$this->get_size_label( $slot_data['sizes'] ),
+				$slot_data['placement']
+			),
+		);
+	}
+
+	/**
+	 * Convert sizes array to readable string
+	 *
+	 * @param array $sizes Array of size pairs [[width, height], ...]
+	 * @return string Formatted size label (e.g., "970x250, 728x90")
+	 */
+	private function get_size_label( $sizes ) {
+		if ( empty( $sizes ) ) {
+			return 'No sizes';
+		}
+		
+		$labels = array_map(
+			function( $size ) {
+				if ( is_array( $size ) && count( $size ) === 2 ) {
+					return $size[0] . 'x' . $size[1];
+				}
+				return 'Invalid';
+			},
+			$sizes
+		);
+		
+		return implode( ', ', $labels );
 	}
 }
