@@ -390,9 +390,13 @@ The `/wp-json/hip-ads/v1/slots` endpoint includes debug info in the main respons
         "created": "2024-01-15 10:00:00",
         "modified": "2024-01-20 15:30:00",
         "sizesRaw": "[[970,250],[728,90]]",
+        "filteredMeta": {
+          "gam_slot_id": "header-leaderboard",
+          "gam_placement": "header",
+          "gam_status": "active"
+        },
         "sizeLabel": "970x250, 728x90",
-        "displayInfo": "Slot ID: header-leaderboard | Sizes: 970x250, 728x90 | Placement: header",
-        "allMeta": { ... }
+        "displayInfo": "Slot ID: header-leaderboard | Sizes: 970x250, 728x90 | Placement: header"
       }
     }
   ]
@@ -452,6 +456,8 @@ export function AdSlot({ slot }: AdSlotProps) {
 ### Security Note
 
 Debug mode should only be enabled in development or staging environments. In production, debug information could expose internal implementation details. Always disable debug mode before launching to production.
+
+**Important**: Debug information is filtered to only include GAM-specific metadata fields. Sensitive WordPress metadata (like custom fields unrelated to ad management) is excluded from debug responses for security.
 
 ---
 

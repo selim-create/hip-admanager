@@ -416,17 +416,18 @@ class HIP_Ad_REST_API {
 	 * @return string 'HIT' or 'MISS'
 	 */
 	private function get_cache_status() {
-		global $wpdb;
+		// Use a lightweight check - just see if we have any cached result
+		// This avoids counting all transients on every request
+		$cache_key = 'hip_ad_cache_check';
+		$cached = get_transient( $cache_key );
 		
-		// Check if we have any cached slots data
-		$count = $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s",
-				$wpdb->esc_like( '_transient_hip_ad_slots_' ) . '%'
-			)
-		);
+		if ( false !== $cached ) {
+			return 'HIT';
+		}
 		
-		return $count > 0 ? 'HIT' : 'MISS';
+		// Set a short-lived transient to track cache status
+		set_transient( $cache_key, 1, 60 ); // 60 seconds
+		return 'MISS';
 	}
 
 	/**
@@ -439,13 +440,43 @@ class HIP_Ad_REST_API {
 	private function get_slot_debug_info( $post, $slot_data ) {
 		$sizes_raw = get_post_meta( $post->ID, 'gam_sizes', true );
 		
+		// Get all metadata but filter to only GAM-related fields for security
+		// This prevents exposing potentially sensitive metadata
+		$all_meta = get_post_meta( $post->ID );
+		$filtered_meta = array();
+		
+		// Only include GAM-specific metadata fields
+		$allowed_meta_keys = array(
+			'gam_slot_id',
+			'gam_ad_unit_path',
+			'gam_sizes',
+			'gam_size_mappings',
+			'gam_targeting',
+			'gam_placement',
+			'gam_device',
+			'gam_lazy_load',
+			'gam_display_rules',
+			'gam_status',
+			'gam_priority',
+			'_hip_ad_refresh_enabled',
+			'_hip_ad_refresh_interval',
+			'_hip_ad_max_refreshes',
+		);
+		
+		foreach ( $allowed_meta_keys as $key ) {
+			if ( isset( $all_meta[ $key ] ) ) {
+				// Get the first value from the meta array
+				$filtered_meta[ $key ] = $all_meta[ $key ][0];
+			}
+		}
+		
 		return array(
 			'postId'      => $post->ID,
 			'postStatus'  => $post->post_status,
 			'created'     => $post->post_date,
 			'modified'    => $post->post_modified,
 			'sizesRaw'    => $sizes_raw,
-			'allMeta'     => get_post_meta( $post->ID ),
+			'filteredMeta' => $filtered_meta,
 			'sizeLabel'   => $this->get_size_label( $slot_data['sizes'] ),
 			'displayInfo' => sprintf(
 				'Slot ID: %s | Sizes: %s | Placement: %s',
