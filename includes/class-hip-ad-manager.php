@@ -153,9 +153,9 @@ class HIP_Ad_Manager {
 	 * @param WP_Post $post
 	 */
 	public function clear_slots_cache( $post_id, $post ) {
-		global $wpdb;
-		
-		// Delete all transients with our prefix
-		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_hip_ad_slots_%' OR option_name LIKE '_transient_timeout_hip_ad_slots_%'" );
+		// Call the REST API's cache clearing method
+		if ( $this->rest_api ) {
+			$this->rest_api->clear_slots_cache();
+		}
 	}
 }

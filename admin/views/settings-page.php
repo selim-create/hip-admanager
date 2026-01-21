@@ -135,6 +135,10 @@ $ads_txt_content = get_option( 'hip_ad_ads_txt_content', '' );
 	
 	<script>
 	// Clear cache via REST API with proper WordPress nonce authentication
+	// Note: Nonce is generated server-side during page render. While it may become
+	// stale if the page is cached or open for extended periods (>24 hours), this is
+	// acceptable for an admin-only action. WordPress will return a 403 error if the
+	// nonce expires, prompting the user to refresh the page.
 	document.getElementById('hip-ad-clear-cache').addEventListener('click', function() {
 		const button = this;
 		const status = document.getElementById('hip-ad-cache-status');

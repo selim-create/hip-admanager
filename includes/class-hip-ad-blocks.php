@@ -62,7 +62,11 @@ class HIP_Ad_Blocks {
 	 * 
 	 * This approach uses WordPress's built-in block editor APIs and is fully
 	 * compatible with the Gutenberg editor. For production sites requiring
-	 * advanced features, a build step can be added using the included package.json.
+	 * advanced features or performance optimization, a build step can be added
+	 * using the included package.json (run `npm install && npm run build`).
+	 * 
+	 * Performance consideration: The inline script is ~6KB minified and only
+	 * loads in the block editor, not on the frontend.
 	 */
 	public function enqueue_block_editor_assets() {
 		// Enqueue inline script for now (simpler than building)

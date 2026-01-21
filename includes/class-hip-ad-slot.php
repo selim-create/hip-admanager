@@ -431,6 +431,9 @@ class HIP_Ad_Slot {
 			'mobile'  => 100,
 		);
 		
+		// Allow customization of default heights
+		$responsive_heights = apply_filters( 'hip_ad_default_responsive_heights', $responsive_heights );
+		
 		if ( empty( $size_mappings ) || ! is_array( $size_mappings ) ) {
 			return $responsive_heights;
 		}

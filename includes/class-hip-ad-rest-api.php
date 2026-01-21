@@ -337,10 +337,7 @@ class HIP_Ad_REST_API {
 	 * @return WP_REST_Response
 	 */
 	public function clear_cache( $request ) {
-		global $wpdb;
-		
-		// Delete all transients with our prefix
-		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_hip_ad_slots_%' OR option_name LIKE '_transient_timeout_hip_ad_slots_%'" );
+		$this->clear_slots_cache();
 		
 		return new WP_REST_Response(
 			array(
@@ -348,6 +345,24 @@ class HIP_Ad_REST_API {
 				'message' => __( 'Cache cleared successfully', 'hip-admanager' ),
 			),
 			200
+		);
+	}
+	
+	/**
+	 * Clear all slots cache
+	 */
+	public function clear_slots_cache() {
+		global $wpdb;
+		
+		// Delete all transients with our prefix
+		// Using direct query because delete_transient() requires individual keys
+		// and we need to clear all variations
+		$wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
+				$wpdb->esc_like( '_transient_hip_ad_slots_' ) . '%',
+				$wpdb->esc_like( '_transient_timeout_hip_ad_slots_' ) . '%'
+			)
 		);
 	}
 }
