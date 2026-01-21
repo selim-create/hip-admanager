@@ -350,13 +350,21 @@ class HIP_Ad_REST_API {
 	
 	/**
 	 * Clear all slots cache
+	 * 
+	 * Note: Uses direct database query because WordPress doesn't provide a way
+	 * to delete multiple transients by wildcard. This is necessary to clear all
+	 * cached variations of slot queries (different parameters = different cache keys).
+	 * 
+	 * For large sites with many transients, this could be optimized by:
+	 * - Implementing as a background task
+	 * - Using object cache flush if available
+	 * - Storing cache keys in an option for targeted deletion
 	 */
 	public function clear_slots_cache() {
 		global $wpdb;
 		
 		// Delete all transients with our prefix
-		// Using direct query because delete_transient() requires individual keys
-		// and we need to clear all variations
+		// Using $wpdb->prepare() for security
 		$wpdb->query(
 			$wpdb->prepare(
 				"DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",

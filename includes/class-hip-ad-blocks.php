@@ -66,7 +66,8 @@ class HIP_Ad_Blocks {
 	 * using the included package.json (run `npm install && npm run build`).
 	 * 
 	 * Performance consideration: The inline script is ~6KB minified and only
-	 * loads in the block editor, not on the frontend.
+	 * loads in the block editor (admin), not on the frontend. This hook only
+	 * fires when the block editor is active.
 	 */
 	public function enqueue_block_editor_assets() {
 		// Enqueue inline script for now (simpler than building)

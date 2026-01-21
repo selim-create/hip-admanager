@@ -399,9 +399,11 @@ class HIP_Ad_Slot {
 	
 	/**
 	 * Calculate minimum height from sizes array
+	 * 
+	 * Note: Expects size format as [width, height] arrays, e.g., [728, 90]
 	 *
-	 * @param array $sizes
-	 * @return int
+	 * @param array $sizes Array of [width, height] pairs
+	 * @return int Maximum height found in sizes
 	 */
 	private static function calculate_min_height( $sizes ) {
 		if ( empty( $sizes ) || ! is_array( $sizes ) ) {
@@ -410,6 +412,7 @@ class HIP_Ad_Slot {
 		
 		$max_height = 0;
 		foreach ( $sizes as $size ) {
+			// Size format: [width, height]
 			if ( is_array( $size ) && isset( $size[1] ) && is_numeric( $size[1] ) ) {
 				$max_height = max( $max_height, (int) $size[1] );
 			}
