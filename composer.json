@@ -1,0 +1,21 @@
+{
+  "name": "selim-create/hip-admanager",
+  "description": "Google Ad Manager integration for headless WordPress projects",
+  "type": "wordpress-plugin",
+  "license": "GPL-2.0-or-later",
+  "authors": [
+    {
+      "name": "HIP",
+      "homepage": "https://github.com/selim-create"
+    }
+  ],
+  "require": {
+    "php": ">=7.4"
+  },
+  "autoload": {
+    "classmap": [
+      "includes/",
+      "admin/"
+    ]
+  }
+}
