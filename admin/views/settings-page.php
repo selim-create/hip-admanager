@@ -16,6 +16,7 @@ $enable_lazy_load = isset( $settings['enable_lazy_load'] ) ? $settings['enable_l
 $enable_single_request = isset( $settings['enable_single_request'] ) ? $settings['enable_single_request'] : 1;
 $global_targeting = isset( $settings['global_targeting'] ) ? $settings['global_targeting'] : '{}';
 $cache_duration = isset( $settings['cache_duration'] ) ? $settings['cache_duration'] : 3600;
+$debug_mode = isset( $settings['debug_mode'] ) ? $settings['debug_mode'] : 0;
 $ads_txt_content = get_option( 'hip_ad_ads_txt_content', '' );
 ?>
 <div class="wrap">
@@ -74,6 +75,17 @@ $ads_txt_content = get_option( 'hip_ad_ads_txt_content', '' );
 				<td>
 					<textarea id="global_targeting" name="global_targeting" rows="5" class="large-text code"><?php echo esc_textarea( $global_targeting ); ?></textarea>
 					<p class="description"><?php esc_html_e( 'JSON object with global targeting key-value pairs (e.g., {"site": "kidsgourmet"})', 'hip-admanager' ); ?></p>
+				</td>
+			</tr>
+
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Debug Mode', 'hip-admanager' ); ?></th>
+				<td>
+					<label>
+						<input type="checkbox" name="debug_mode" value="1" <?php checked( $debug_mode, 1 ); ?> />
+						<?php esc_html_e( 'Enable Debug Mode', 'hip-admanager' ); ?>
+					</label>
+					<p class="description"><?php esc_html_e( 'When enabled, API responses include debug information and frontend can display placeholder boxes with slot details.', 'hip-admanager' ); ?></p>
 				</td>
 			</tr>
 		</table>

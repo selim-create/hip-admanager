@@ -133,6 +133,7 @@ class HIP_Ad_REST_API {
 	 */
 	public function get_config( $request ) {
 		$settings = get_option( 'hip_ad_manager_settings', array() );
+		$debug_mode = isset( $settings['debug_mode'] ) ? (bool) $settings['debug_mode'] : false;
 
 		$config = array(
 			'networkCode'         => isset( $settings['network_code'] ) ? $settings['network_code'] : '',
@@ -149,6 +150,18 @@ class HIP_Ad_REST_API {
 				'idleTimeout'        => 200,
 			),
 		);
+
+		// Add debug information if debug mode is enabled
+		if ( $debug_mode ) {
+			$config['debug'] = array(
+				'enabled'       => true,
+				'timestamp'     => current_time( 'c' ),
+				'cacheStatus'   => $this->get_cache_status(),
+				'phpVersion'    => PHP_VERSION,
+				'wpVersion'     => get_bloginfo( 'version' ),
+				'pluginVersion' => HIP_AD_MANAGER_VERSION,
+			);
+		}
 
 		return new WP_REST_Response( $config, 200 );
 	}
@@ -218,6 +231,7 @@ class HIP_Ad_REST_API {
 	 */
 	private function fetch_slots_from_db( $params ) {
 		$settings = get_option( 'hip_ad_manager_settings', array() );
+		$debug_mode = isset( $settings['debug_mode'] ) ? (bool) $settings['debug_mode'] : false;
 
 		// Build query args
 		$query_args = array(
@@ -263,10 +277,17 @@ class HIP_Ad_REST_API {
 		$slots = array();
 
 		foreach ( $query->posts as $post ) {
-			$slots[] = HIP_Ad_Slot::format_slot_data( $post );
+			$slot_data = HIP_Ad_Slot::format_slot_data( $post );
+			
+			// Add debug information if debug mode is enabled
+			if ( $debug_mode ) {
+				$slot_data['debug'] = $this->get_slot_debug_info( $post, $slot_data );
+			}
+			
+			$slots[] = $slot_data;
 		}
 
-		return array(
+		$response = array(
 			'networkCode'         => isset( $settings['network_code'] ) ? $settings['network_code'] : '',
 			'enableLazyLoad'      => isset( $settings['enable_lazy_load'] ) ? (bool) $settings['enable_lazy_load'] : true,
 			'enableSingleRequest' => isset( $settings['enable_single_request'] ) ? (bool) $settings['enable_single_request'] : true,
@@ -277,6 +298,20 @@ class HIP_Ad_REST_API {
 			'dynamicTargetingKeys' => array( 'category', 'tags', 'author', 'postType', 'customKey' ),
 			'slots'               => $slots,
 		);
+
+		// Add debug information if debug mode is enabled
+		if ( $debug_mode ) {
+			$response['debug'] = array(
+				'enabled'       => true,
+				'timestamp'     => current_time( 'c' ),
+				'cacheStatus'   => $this->get_cache_status(),
+				'phpVersion'    => PHP_VERSION,
+				'wpVersion'     => get_bloginfo( 'version' ),
+				'pluginVersion' => HIP_AD_MANAGER_VERSION,
+			);
+		}
+
+		return $response;
 	}
 
 	/**
@@ -372,5 +407,76 @@ class HIP_Ad_REST_API {
 				$wpdb->esc_like( '_transient_timeout_hip_ad_slots_' ) . '%'
 			)
 		);
+	}
+
+	/**
+	 * Get cache status
+	 * Determines if cache is being used based on transient existence
+	 *
+	 * @return string 'HIT' or 'MISS'
+	 */
+	private function get_cache_status() {
+		global $wpdb;
+		
+		// Check if we have any cached slots data
+		$count = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->options} WHERE option_name LIKE %s",
+				$wpdb->esc_like( '_transient_hip_ad_slots_' ) . '%'
+			)
+		);
+		
+		return $count > 0 ? 'HIT' : 'MISS';
+	}
+
+	/**
+	 * Get debug information for a slot
+	 *
+	 * @param WP_Post $post The slot post object
+	 * @param array   $slot_data The formatted slot data
+	 * @return array Debug information
+	 */
+	private function get_slot_debug_info( $post, $slot_data ) {
+		$sizes_raw = get_post_meta( $post->ID, 'gam_sizes', true );
+		
+		return array(
+			'postId'      => $post->ID,
+			'postStatus'  => $post->post_status,
+			'created'     => $post->post_date,
+			'modified'    => $post->post_modified,
+			'sizesRaw'    => $sizes_raw,
+			'allMeta'     => get_post_meta( $post->ID ),
+			'sizeLabel'   => $this->get_size_label( $slot_data['sizes'] ),
+			'displayInfo' => sprintf(
+				'Slot ID: %s | Sizes: %s | Placement: %s',
+				$slot_data['slotId'],
+				$this->get_size_label( $slot_data['sizes'] ),
+				$slot_data['placement']
+			),
+		);
+	}
+
+	/**
+	 * Convert sizes array to readable string
+	 *
+	 * @param array $sizes Array of size pairs [[width, height], ...]
+	 * @return string Formatted size label (e.g., "970x250, 728x90")
+	 */
+	private function get_size_label( $sizes ) {
+		if ( empty( $sizes ) ) {
+			return 'No sizes';
+		}
+		
+		$labels = array_map(
+			function( $size ) {
+				if ( is_array( $size ) && count( $size ) === 2 ) {
+					return $size[0] . 'x' . $size[1];
+				}
+				return 'Invalid';
+			},
+			$sizes
+		);
+		
+		return implode( ', ', $labels );
 	}
 }

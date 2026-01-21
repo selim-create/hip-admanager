@@ -65,6 +65,13 @@ class HIP_Ad_Manager {
 	public $admin;
 
 	/**
+	 * Blocks instance
+	 *
+	 * @var HIP_Ad_Blocks
+	 */
+	public $blocks;
+
+	/**
 	 * Get singleton instance
 	 *
 	 * @return HIP_Ad_Manager
