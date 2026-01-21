@@ -1,0 +1,6 @@
+#ID,Parent Id,Code,Name,Sizes:,Description,Enabled for AdSense,Placements,Target Window,Labels
+23335123404,23335085636,KidsGourmet.com.tr/kidsgourmet_160x600_wideskyscraper_left,kidsgourmet_160x600_WideSkyscraper_Left,120x600; 160x600; 161x600,,no,,_blank,
+23335123653,23335085636,KidsGourmet.com.tr/kidsgourmet_160x600_wideskyscraper_right,kidsgourmet_160x600_WideSkyscraper_Right,120x600; 121x600; 160x600,,no,,_blank,
+23335123656,23335085636,KidsGourmet.com.tr/kidsgourmet_300x250_mediumrectangle,kidsgourmet_300x250_MediumRectangle,250x250; 250x360; 300x200; 300x250; 300x260; 336x280,,no,,_blank,
+23335123659,23335085636,KidsGourmet.com.tr/kidsgourmet_728x90_leaderboard,kidsgourmet_728x90_Leaderboard,320x50; 320x100; 728x90; 970x90; 970x250,,no,,_blank,
+23335123662,23335085636,KidsGourmet.com.tr/kidsgourmet_mobile_320x50_sticky,kidsgourmet_mobile_320x50_MobileSticky,320x50; 320x100,,no,,_blank,
