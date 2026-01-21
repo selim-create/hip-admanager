@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<div class="hip-ad-stats">
 			<div class="hip-ad-stat-box">
 				<h3><?php esc_html_e( 'Total Ad Slots', 'hip-admanager' ); ?></h3>
-				<p class="hip-ad-stat-number"><?php echo esc_html( $total_slots->publish ); ?></p>
+				<p class="hip-ad-stat-number"><?php echo esc_html( $total_slots->publish ?? 0 ); ?></p>
 			</div>
 
 			<div class="hip-ad-stat-box">

@@ -24,7 +24,7 @@ class HIP_Ad_Slot {
 	 * Constructor
 	 */
 	public function __construct() {
-		add_action( 'init', array( $this, 'register_post_type' ) );
+		add_action( 'init', array( $this, 'register_post_type' ), 0 );
 		add_action( 'add_meta_boxes', array( $this, 'add_meta_boxes' ) );
 		add_action( 'save_post_' . self::POST_TYPE, array( $this, 'save_meta_boxes' ), 10, 2 );
 	}
@@ -65,6 +65,11 @@ class HIP_Ad_Slot {
 		);
 
 		register_post_type( self::POST_TYPE, $args );
+		
+		// Debug logging
+		if ( ! post_type_exists( self::POST_TYPE ) ) {
+			error_log( 'HIP Ad Manager: Custom post type ' . self::POST_TYPE . ' not registered!' );
+		}
 	}
 
 	/**
