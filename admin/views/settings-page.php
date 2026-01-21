@@ -134,6 +134,7 @@ $ads_txt_content = get_option( 'hip_ad_ads_txt_content', '' );
 	</p>
 	
 	<script>
+	// Clear cache via REST API with proper WordPress nonce authentication
 	document.getElementById('hip-ad-clear-cache').addEventListener('click', function() {
 		const button = this;
 		const status = document.getElementById('hip-ad-cache-status');
@@ -147,7 +148,8 @@ $ads_txt_content = get_option( 'hip_ad_ads_txt_content', '' );
 			headers: {
 				'Content-Type': 'application/json',
 				'X-WP-Nonce': '<?php echo esc_js( wp_create_nonce( 'wp_rest' ) ); ?>'
-			}
+			},
+			credentials: 'same-origin' // Include cookies for authentication
 		})
 		.then(response => response.json())
 		.then(data => {

@@ -404,13 +404,13 @@ class HIP_Ad_Slot {
 	 * @return int
 	 */
 	private static function calculate_min_height( $sizes ) {
-		if ( empty( $sizes ) ) {
+		if ( empty( $sizes ) || ! is_array( $sizes ) ) {
 			return 0;
 		}
 		
 		$max_height = 0;
 		foreach ( $sizes as $size ) {
-			if ( is_array( $size ) && isset( $size[1] ) ) {
+			if ( is_array( $size ) && isset( $size[1] ) && is_numeric( $size[1] ) ) {
 				$max_height = max( $max_height, (int) $size[1] );
 			}
 		}
@@ -431,20 +431,24 @@ class HIP_Ad_Slot {
 			'mobile'  => 100,
 		);
 		
-		if ( empty( $size_mappings ) ) {
+		if ( empty( $size_mappings ) || ! is_array( $size_mappings ) ) {
 			return $responsive_heights;
 		}
 		
 		foreach ( $size_mappings as $mapping ) {
-			if ( ! isset( $mapping['viewport'] ) || ! isset( $mapping['sizes'] ) ) {
+			if ( ! is_array( $mapping ) || ! isset( $mapping['viewport'] ) || ! isset( $mapping['sizes'] ) ) {
 				continue;
 			}
 			
 			$viewport_width = isset( $mapping['viewport'][0] ) ? (int) $mapping['viewport'][0] : 0;
 			$max_height = 0;
 			
+			if ( ! is_array( $mapping['sizes'] ) ) {
+				continue;
+			}
+			
 			foreach ( $mapping['sizes'] as $size ) {
-				if ( is_array( $size ) && isset( $size[1] ) ) {
+				if ( is_array( $size ) && isset( $size[1] ) && is_numeric( $size[1] ) ) {
 					$max_height = max( $max_height, (int) $size[1] );
 				}
 			}

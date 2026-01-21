@@ -53,6 +53,16 @@ class HIP_Ad_Blocks {
 
 	/**
 	 * Enqueue block editor assets
+	 * 
+	 * Note: We use inline JavaScript registration instead of a build step to:
+	 * 1. Avoid requiring Node.js and npm dependencies
+	 * 2. Simplify plugin installation and deployment
+	 * 3. Reduce build complexity for WordPress plugin hosting
+	 * 4. Maintain compatibility with standard WordPress hosting environments
+	 * 
+	 * This approach uses WordPress's built-in block editor APIs and is fully
+	 * compatible with the Gutenberg editor. For production sites requiring
+	 * advanced features, a build step can be added using the included package.json.
 	 */
 	public function enqueue_block_editor_assets() {
 		// Enqueue inline script for now (simpler than building)

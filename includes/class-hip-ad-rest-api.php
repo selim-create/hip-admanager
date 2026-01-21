@@ -192,8 +192,7 @@ class HIP_Ad_REST_API {
 	 * @return array|false
 	 */
 	private function get_cached_slots( $params ) {
-		$cache_key  = 'hip_ad_slots_' . md5( serialize( $params ) );
-		$cache_time = apply_filters( 'hip_ad_cache_duration', HOUR_IN_SECONDS );
+		$cache_key = 'hip_ad_slots_' . md5( wp_json_encode( $params ) );
 		
 		return get_transient( $cache_key );
 	}
@@ -205,7 +204,7 @@ class HIP_Ad_REST_API {
 	 * @param array $data
 	 */
 	private function cache_slots( $params, $data ) {
-		$cache_key  = 'hip_ad_slots_' . md5( serialize( $params ) );
+		$cache_key  = 'hip_ad_slots_' . md5( wp_json_encode( $params ) );
 		$cache_time = apply_filters( 'hip_ad_cache_duration', HOUR_IN_SECONDS );
 		
 		set_transient( $cache_key, $data, $cache_time );
