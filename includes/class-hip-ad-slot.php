@@ -65,11 +65,6 @@ class HIP_Ad_Slot {
 		);
 
 		register_post_type( self::POST_TYPE, $args );
-		
-		// Debug logging
-		if ( ! post_type_exists( self::POST_TYPE ) ) {
-			error_log( 'HIP Ad Manager: Custom post type ' . self::POST_TYPE . ' not registered!' );
-		}
 	}
 
 	/**
