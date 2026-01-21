@@ -36,6 +36,9 @@ Thumbs.db
 *~
 blocks/*/build/
 
+# Test files
+validate.php
+
 # Environment
 .env
 .env.local
