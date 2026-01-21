@@ -1,0 +1,22 @@
+/**
+ * Ad Slot Block - Frontend Styles
+ */
+.hip-ad-injection {
+	margin: 20px 0;
+	min-height: 100px;
+}
+
+.hip-ad-injection.align-left {
+	text-align: left;
+}
+
+.hip-ad-injection.align-center {
+	text-align: center;
+	margin-left: auto;
+	margin-right: auto;
+}
+
+.hip-ad-injection.align-right {
+	text-align: right;
+	margin-left: auto;
+}

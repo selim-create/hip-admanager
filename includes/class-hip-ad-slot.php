@@ -99,6 +99,15 @@ class HIP_Ad_Slot {
 			'normal',
 			'default'
 		);
+		
+		add_meta_box(
+			'hip_ad_refresh',
+			__( 'Refresh Settings', 'hip-admanager' ),
+			array( $this, 'render_refresh_metabox' ),
+			self::POST_TYPE,
+			'normal',
+			'default'
+		);
 
 		add_meta_box(
 			'hip_ad_display_rules',
@@ -159,6 +168,24 @@ class HIP_Ad_Slot {
 		}
 		
 		include HIP_AD_MANAGER_PLUGIN_DIR . 'admin/views/metaboxes/targeting.php';
+	}
+	
+	/**
+	 * Render Refresh metabox
+	 */
+	public function render_refresh_metabox( $post ) {
+		$refresh_enabled = get_post_meta( $post->ID, '_hip_ad_refresh_enabled', true );
+		$refresh_interval = get_post_meta( $post->ID, '_hip_ad_refresh_interval', true );
+		$max_refreshes = get_post_meta( $post->ID, '_hip_ad_max_refreshes', true );
+		
+		if ( empty( $refresh_interval ) ) {
+			$refresh_interval = '30';
+		}
+		if ( empty( $max_refreshes ) ) {
+			$max_refreshes = '10';
+		}
+		
+		include HIP_AD_MANAGER_PLUGIN_DIR . 'admin/views/metaboxes/refresh.php';
 	}
 
 	/**
@@ -278,6 +305,17 @@ class HIP_Ad_Slot {
 		if ( isset( $_POST['gam_priority'] ) ) {
 			update_post_meta( $post_id, 'gam_priority', absint( $_POST['gam_priority'] ) );
 		}
+		
+		// Save refresh settings
+		update_post_meta( $post_id, '_hip_ad_refresh_enabled', isset( $_POST['hip_ad_refresh_enabled'] ) ? '1' : '0' );
+		
+		if ( isset( $_POST['hip_ad_refresh_interval'] ) ) {
+			update_post_meta( $post_id, '_hip_ad_refresh_interval', absint( $_POST['hip_ad_refresh_interval'] ) );
+		}
+		
+		if ( isset( $_POST['hip_ad_max_refreshes'] ) ) {
+			update_post_meta( $post_id, '_hip_ad_max_refreshes', absint( $_POST['hip_ad_max_refreshes'] ) );
+		}
 	}
 
 	/**
@@ -316,19 +354,121 @@ class HIP_Ad_Slot {
 		$sizes = get_post_meta( $post->ID, 'gam_sizes', true );
 		$size_mappings = get_post_meta( $post->ID, 'gam_size_mappings', true );
 		$targeting = get_post_meta( $post->ID, 'gam_targeting', true );
+		
+		// Decode sizes
+		$sizes_array = ! empty( $sizes ) ? json_decode( $sizes, true ) : array();
+		$size_mappings_array = ! empty( $size_mappings ) ? json_decode( $size_mappings, true ) : array();
 
 		return array(
-			'id'           => $post->ID,
-			'name'         => $post->post_title,
-			'slotId'       => get_post_meta( $post->ID, 'gam_slot_id', true ),
-			'adUnitPath'   => get_post_meta( $post->ID, 'gam_ad_unit_path', true ),
-			'sizes'        => ! empty( $sizes ) ? json_decode( $sizes, true ) : array(),
-			'sizeMappings' => ! empty( $size_mappings ) ? json_decode( $size_mappings, true ) : array(),
-			'targeting'    => ! empty( $targeting ) ? json_decode( $targeting, true ) : new stdClass(),
-			'lazyLoad'     => (bool) get_post_meta( $post->ID, 'gam_lazy_load', true ),
-			'placement'    => get_post_meta( $post->ID, 'gam_placement', true ),
-			'device'       => get_post_meta( $post->ID, 'gam_device', true ),
-			'priority'     => (int) get_post_meta( $post->ID, 'gam_priority', true ),
+			'id'                  => $post->ID,
+			'name'                => $post->post_title,
+			'slotId'              => get_post_meta( $post->ID, 'gam_slot_id', true ),
+			'adUnitPath'          => get_post_meta( $post->ID, 'gam_ad_unit_path', true ),
+			'sizes'               => $sizes_array,
+			'sizeMappings'        => $size_mappings_array,
+			'targeting'           => ! empty( $targeting ) ? json_decode( $targeting, true ) : new stdClass(),
+			'lazyLoad'            => (bool) get_post_meta( $post->ID, 'gam_lazy_load', true ),
+			'placement'           => get_post_meta( $post->ID, 'gam_placement', true ),
+			'device'              => get_post_meta( $post->ID, 'gam_device', true ),
+			'priority'            => (int) get_post_meta( $post->ID, 'gam_priority', true ),
+			'minHeight'           => self::calculate_min_height( $sizes_array ),
+			'responsiveMinHeight' => self::calculate_responsive_min_height( $size_mappings_array ),
+			'placeholder'         => array(
+				'enabled'         => true,
+				'backgroundColor' => '#f0f0f0',
+				'showLabel'       => true,
+				'labelText'       => __( 'Advertisement', 'hip-admanager' ),
+			),
+			'refresh'             => array(
+				'enabled'          => get_post_meta( $post->ID, '_hip_ad_refresh_enabled', true ) === '1',
+				'interval'         => (int) get_post_meta( $post->ID, '_hip_ad_refresh_interval', true ) ?: 30,
+				'maxRefreshes'     => (int) get_post_meta( $post->ID, '_hip_ad_max_refreshes', true ) ?: 10,
+				'refreshOnVisible' => true,
+				'pauseOnHidden'    => true,
+			),
+			'lazyLoadConfig'      => array(
+				'enabled'            => (bool) get_post_meta( $post->ID, 'gam_lazy_load', true ),
+				'strategy'           => 'intersection',
+				'fetchMarginPercent' => 200,
+				'renderMarginPercent' => 100,
+				'mobileScaling'      => 2.0,
+				'idleTimeout'        => 200,
+			),
 		);
+	}
+	
+	/**
+	 * Calculate minimum height from sizes array
+	 * 
+	 * Note: Expects size format as [width, height] arrays, e.g., [728, 90]
+	 *
+	 * @param array $sizes Array of [width, height] pairs
+	 * @return int Maximum height found in sizes
+	 */
+	private static function calculate_min_height( $sizes ) {
+		if ( empty( $sizes ) || ! is_array( $sizes ) ) {
+			return 0;
+		}
+		
+		$max_height = 0;
+		foreach ( $sizes as $size ) {
+			// Size format: [width, height]
+			if ( is_array( $size ) && isset( $size[1] ) && is_numeric( $size[1] ) ) {
+				$max_height = max( $max_height, (int) $size[1] );
+			}
+		}
+		
+		return $max_height;
+	}
+	
+	/**
+	 * Calculate responsive minimum heights from size mappings
+	 *
+	 * @param array $size_mappings
+	 * @return array
+	 */
+	private static function calculate_responsive_min_height( $size_mappings ) {
+		$responsive_heights = array(
+			'desktop' => 250,
+			'tablet'  => 90,
+			'mobile'  => 100,
+		);
+		
+		// Allow customization of default heights
+		$responsive_heights = apply_filters( 'hip_ad_default_responsive_heights', $responsive_heights );
+		
+		if ( empty( $size_mappings ) || ! is_array( $size_mappings ) ) {
+			return $responsive_heights;
+		}
+		
+		foreach ( $size_mappings as $mapping ) {
+			if ( ! is_array( $mapping ) || ! isset( $mapping['viewport'] ) || ! isset( $mapping['sizes'] ) ) {
+				continue;
+			}
+			
+			$viewport_width = isset( $mapping['viewport'][0] ) ? (int) $mapping['viewport'][0] : 0;
+			$max_height = 0;
+			
+			if ( ! is_array( $mapping['sizes'] ) ) {
+				continue;
+			}
+			
+			foreach ( $mapping['sizes'] as $size ) {
+				if ( is_array( $size ) && isset( $size[1] ) && is_numeric( $size[1] ) ) {
+					$max_height = max( $max_height, (int) $size[1] );
+				}
+			}
+			
+			// Map viewport to device type
+			if ( $viewport_width >= 1024 ) {
+				$responsive_heights['desktop'] = max( $responsive_heights['desktop'], $max_height );
+			} elseif ( $viewport_width >= 768 ) {
+				$responsive_heights['tablet'] = max( $responsive_heights['tablet'], $max_height );
+			} else {
+				$responsive_heights['mobile'] = max( $responsive_heights['mobile'], $max_height );
+			}
+		}
+		
+		return $responsive_heights;
 	}
 }

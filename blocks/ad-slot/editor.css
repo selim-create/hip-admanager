@@ -1,0 +1,18 @@
+/**
+ * Ad Slot Block - Editor Styles
+ */
+.hip-ad-placeholder {
+	margin: 20px 0;
+}
+
+.hip-ad-placeholder.align-left {
+	text-align: left;
+}
+
+.hip-ad-placeholder.align-center {
+	text-align: center;
+}
+
+.hip-ad-placeholder.align-right {
+	text-align: right;
+}

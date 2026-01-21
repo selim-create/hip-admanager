@@ -73,6 +73,16 @@ class HIP_Ad_Settings {
 				$sanitized['default_size_mappings'] = wp_json_encode( $size_mappings );
 			}
 		}
+		
+		// Save cache duration
+		if ( isset( $input['cache_duration'] ) ) {
+			$sanitized['cache_duration'] = absint( $input['cache_duration'] );
+		}
+		
+		// Save ads.txt separately (not in main settings array)
+		if ( isset( $input['ads_txt_content'] ) ) {
+			update_option( 'hip_ad_ads_txt_content', sanitize_textarea_field( $input['ads_txt_content'] ) );
+		}
 
 		return $sanitized;
 	}

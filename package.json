@@ -1,0 +1,20 @@
+{
+	"name": "hip-admanager-blocks",
+	"version": "1.0.0",
+	"description": "Gutenberg blocks for HIP Ad Manager",
+	"scripts": {
+		"build": "wp-scripts build blocks/ad-slot/index.js --output-path=blocks/ad-slot/build",
+		"start": "wp-scripts start blocks/ad-slot/index.js --output-path=blocks/ad-slot/build"
+	},
+	"devDependencies": {
+		"@wordpress/scripts": "^26.0.0"
+	},
+	"dependencies": {
+		"@wordpress/block-editor": "^12.0.0",
+		"@wordpress/blocks": "^12.0.0",
+		"@wordpress/components": "^25.0.0",
+		"@wordpress/core-data": "^6.0.0",
+		"@wordpress/data": "^9.0.0",
+		"@wordpress/i18n": "^4.0.0"
+	}
+}
