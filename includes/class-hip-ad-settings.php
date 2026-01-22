@@ -49,7 +49,7 @@ class HIP_Ad_Settings {
 	public function sanitize_settings( $input ) {
 		$sanitized = array();
 
-		$sanitized['ads_enabled'] = isset( $input['ads_enabled'] ) ? 1 : 0;
+		$sanitized['ads_enabled'] = ! empty( $input['ads_enabled'] ) ? 1 : 0;
 
 		if ( isset( $input['network_code'] ) ) {
 			$sanitized['network_code'] = sanitize_text_field( $input['network_code'] );
@@ -59,9 +59,9 @@ class HIP_Ad_Settings {
 			$sanitized['site_name'] = sanitize_text_field( $input['site_name'] );
 		}
 
-		$sanitized['enable_lazy_load'] = isset( $input['enable_lazy_load'] ) ? 1 : 0;
-		$sanitized['enable_single_request'] = isset( $input['enable_single_request'] ) ? 1 : 0;
-		$sanitized['debug_mode'] = isset( $input['debug_mode'] ) ? 1 : 0;
+		$sanitized['enable_lazy_load'] = ! empty( $input['enable_lazy_load'] ) ? 1 : 0;
+		$sanitized['enable_single_request'] = ! empty( $input['enable_single_request'] ) ? 1 : 0;
+		$sanitized['debug_mode'] = ! empty( $input['debug_mode'] ) ? 1 : 0;
 
 		if ( isset( $input['global_targeting'] ) ) {
 			$targeting = json_decode( stripslashes( $input['global_targeting'] ), true );

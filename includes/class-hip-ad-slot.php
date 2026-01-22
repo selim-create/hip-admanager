@@ -29,6 +29,15 @@ class HIP_Ad_Slot {
 		
 		add_action( 'add_meta_boxes', array( $this, 'add_meta_boxes' ) );
 		add_action( 'save_post_' . self::POST_TYPE, array( $this, 'save_meta_boxes' ), 10, 2 );
+		
+		// Admin columns
+		add_filter( 'manage_hip_ad_slot_posts_columns', array( $this, 'add_custom_columns' ) );
+		add_action( 'manage_hip_ad_slot_posts_custom_column', array( $this, 'render_custom_columns' ), 10, 2 );
+		add_filter( 'manage_edit-hip_ad_slot_sortable_columns', array( $this, 'sortable_columns' ) );
+		
+		// Admin filters
+		add_action( 'restrict_manage_posts', array( $this, 'add_admin_filters' ) );
+		add_filter( 'parse_query', array( $this, 'filter_query' ) );
 	}
 
 	/**
@@ -470,5 +479,181 @@ class HIP_Ad_Slot {
 		}
 		
 		return $responsive_heights;
+	}
+	
+	/**
+	 * Add custom columns to Ad Slots list
+	 */
+	public function add_custom_columns( $columns ) {
+		$new_columns = array();
+		foreach ( $columns as $key => $value ) {
+			$new_columns[ $key ] = $value;
+			if ( 'title' === $key ) {
+				$new_columns['ad_sizes'] = __( 'Sizes', 'hip-admanager' );
+				$new_columns['ad_device'] = __( 'Device', 'hip-admanager' );
+				$new_columns['ad_placement'] = __( 'Placement', 'hip-admanager' );
+				$new_columns['ad_status'] = __( 'Status', 'hip-admanager' );
+			}
+		}
+		return $new_columns;
+	}
+	
+	/**
+	 * Render custom column content
+	 */
+	public function render_custom_columns( $column, $post_id ) {
+		switch ( $column ) {
+			case 'ad_sizes':
+				$sizes = get_post_meta( $post_id, 'gam_sizes', true );
+				if ( empty( $sizes ) ) {
+					$sizes = get_post_meta( $post_id, '_hip_ad_sizes', true );
+				}
+				if ( ! empty( $sizes ) ) {
+					$sizes_array = is_string( $sizes ) ? json_decode( $sizes, true ) : $sizes;
+					if ( is_array( $sizes_array ) ) {
+						$formatted = array();
+						foreach ( $sizes_array as $size ) {
+							if ( is_array( $size ) && count( $size ) >= 2 ) {
+								$formatted[] = $size[0] . 'x' . $size[1];
+							}
+						}
+						echo esc_html( implode( ', ', $formatted ) );
+					} else {
+						echo '—';
+					}
+				} else {
+					echo '—';
+				}
+				break;
+
+			case 'ad_device':
+				$device = get_post_meta( $post_id, 'gam_device', true );
+				if ( empty( $device ) ) {
+					$device = 'all';
+				}
+				$device_labels = array(
+					'all' => __( 'All', 'hip-admanager' ),
+					'mobile' => __( 'Mobile', 'hip-admanager' ),
+					'desktop' => __( 'Desktop', 'hip-admanager' ),
+					'tablet' => __( 'Tablet', 'hip-admanager' ),
+				);
+				echo esc_html( isset( $device_labels[ $device ] ) ? $device_labels[ $device ] : $device );
+				break;
+
+			case 'ad_placement':
+				$placement = get_post_meta( $post_id, 'gam_placement', true );
+				if ( empty( $placement ) ) {
+					$placement = '—';
+				}
+				$placement_labels = array(
+					'header' => __( 'Header', 'hip-admanager' ),
+					'sidebar' => __( 'Sidebar', 'hip-admanager' ),
+					'in-content' => __( 'In-Content', 'hip-admanager' ),
+					'footer' => __( 'Footer', 'hip-admanager' ),
+					'mobile-sticky' => __( 'Mobile Sticky', 'hip-admanager' ),
+					'interstitial' => __( 'Interstitial', 'hip-admanager' ),
+				);
+				echo esc_html( isset( $placement_labels[ $placement ] ) ? $placement_labels[ $placement ] : $placement );
+				break;
+
+			case 'ad_status':
+				$status = get_post_meta( $post_id, 'gam_status', true );
+				if ( empty( $status ) || 'active' === $status ) {
+					echo '<span style="color: #00a32a;">● ' . esc_html__( 'Active', 'hip-admanager' ) . '</span>';
+				} else {
+					echo '<span style="color: #787c82;">● ' . esc_html__( 'Paused', 'hip-admanager' ) . '</span>';
+				}
+				break;
+		}
+	}
+	
+	/**
+	 * Make columns sortable
+	 */
+	public function sortable_columns( $columns ) {
+		$columns['ad_device'] = 'ad_device';
+		$columns['ad_placement'] = 'ad_placement';
+		$columns['ad_status'] = 'ad_status';
+		return $columns;
+	}
+	
+	/**
+	 * Add dropdown filters
+	 */
+	public function add_admin_filters( $post_type ) {
+		if ( self::POST_TYPE !== $post_type ) {
+			return;
+		}
+
+		// Device filter
+		$current_device = isset( $_GET['filter_device'] ) ? sanitize_text_field( $_GET['filter_device'] ) : '';
+		?>
+		<select name="filter_device">
+			<option value=""><?php esc_html_e( 'All Devices', 'hip-admanager' ); ?></option>
+			<option value="all" <?php selected( $current_device, 'all' ); ?>><?php esc_html_e( 'All (Universal)', 'hip-admanager' ); ?></option>
+			<option value="mobile" <?php selected( $current_device, 'mobile' ); ?>><?php esc_html_e( 'Mobile', 'hip-admanager' ); ?></option>
+			<option value="desktop" <?php selected( $current_device, 'desktop' ); ?>><?php esc_html_e( 'Desktop', 'hip-admanager' ); ?></option>
+			<option value="tablet" <?php selected( $current_device, 'tablet' ); ?>><?php esc_html_e( 'Tablet', 'hip-admanager' ); ?></option>
+		</select>
+		<?php
+
+		// Placement filter
+		$current_placement = isset( $_GET['filter_placement'] ) ? sanitize_text_field( $_GET['filter_placement'] ) : '';
+		$placements = array(
+			'header' => __( 'Header', 'hip-admanager' ),
+			'sidebar' => __( 'Sidebar', 'hip-admanager' ),
+			'in-content' => __( 'In-Content', 'hip-admanager' ),
+			'footer' => __( 'Footer', 'hip-admanager' ),
+			'mobile-sticky' => __( 'Mobile Sticky', 'hip-admanager' ),
+			'interstitial' => __( 'Interstitial', 'hip-admanager' ),
+		);
+		?>
+		<select name="filter_placement">
+			<option value=""><?php esc_html_e( 'All Placements', 'hip-admanager' ); ?></option>
+			<?php foreach ( $placements as $value => $label ) : ?>
+				<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $current_placement, $value ); ?>><?php echo esc_html( $label ); ?></option>
+			<?php endforeach; ?>
+		</select>
+		<?php
+	}
+	
+	/**
+	 * Filter query based on selected filters
+	 */
+	public function filter_query( $query ) {
+		global $pagenow;
+
+		if ( ! is_admin() || 'edit.php' !== $pagenow || ! $query->is_main_query() ) {
+			return;
+		}
+
+		if ( self::POST_TYPE !== $query->get( 'post_type' ) ) {
+			return;
+		}
+
+		$meta_query = array();
+
+		// Filter by device
+		if ( ! empty( $_GET['filter_device'] ) ) {
+			$meta_query[] = array(
+				'key' => 'gam_device',
+				'value' => sanitize_text_field( $_GET['filter_device'] ),
+				'compare' => '=',
+			);
+		}
+
+		// Filter by placement
+		if ( ! empty( $_GET['filter_placement'] ) ) {
+			$meta_query[] = array(
+				'key' => 'gam_placement',
+				'value' => sanitize_text_field( $_GET['filter_placement'] ),
+				'compare' => '=',
+			);
+		}
+
+		if ( ! empty( $meta_query ) ) {
+			$meta_query['relation'] = 'AND';
+			$query->set( 'meta_query', $meta_query );
+		}
 	}
 }
