@@ -589,11 +589,11 @@ class HIP_Ad_REST_API {
 				'targeting'    => isset( $slot['targeting'] ) ? $slot['targeting'] : array(),
 				
 				// Settings
-				'lazy_load'       => isset( $slot['lazy_load'] ) ? (bool) $slot['lazy_load'] : ( isset( $slot['lazyLoad'] ) ? (bool) $slot['lazyLoad'] : true ),
-				'lazyLoad'        => isset( $slot['lazyLoad'] ) ? (bool) $slot['lazyLoad'] : ( isset( $slot['lazy_load'] ) ? (bool) $slot['lazy_load'] : true ),
+				'lazy_load'       => $this->get_dual_bool_field( $slot, 'lazy_load', 'lazyLoad', true ),
+				'lazyLoad'        => $this->get_dual_bool_field( $slot, 'lazyLoad', 'lazy_load', true ),
 				'refresh_interval' => isset( $slot['refresh_interval'] ) ? (int) $slot['refresh_interval'] : 0,
-				'min_height'      => $this->get_dual_field( $slot, 'min_height', 'minHeight', 0 ),
-				'minHeight'       => $this->get_dual_field( $slot, 'minHeight', 'min_height', 0 ),
+				'min_height'      => $this->get_dual_int_field( $slot, 'min_height', 'minHeight', 0 ),
+				'minHeight'       => $this->get_dual_int_field( $slot, 'minHeight', 'min_height', 0 ),
 				
 				// Status
 				'enabled'      => $enabled,
@@ -622,6 +622,44 @@ class HIP_Ad_REST_API {
 		}
 		if ( isset( $data[ $fallback ] ) ) {
 			return $data[ $fallback ];
+		}
+		return $default;
+	}
+
+	/**
+	 * Get boolean field value with fallback to alternative naming convention
+	 *
+	 * @param array  $data Array to search
+	 * @param string $primary Primary field name
+	 * @param string $fallback Fallback field name
+	 * @param bool   $default Default value if neither exists
+	 * @return bool Field value as boolean or default
+	 */
+	private function get_dual_bool_field( $data, $primary, $fallback, $default = false ) {
+		if ( isset( $data[ $primary ] ) ) {
+			return (bool) $data[ $primary ];
+		}
+		if ( isset( $data[ $fallback ] ) ) {
+			return (bool) $data[ $fallback ];
+		}
+		return $default;
+	}
+
+	/**
+	 * Get int field value with fallback to alternative naming convention
+	 *
+	 * @param array  $data Array to search
+	 * @param string $primary Primary field name
+	 * @param string $fallback Fallback field name
+	 * @param int    $default Default value if neither exists
+	 * @return int Field value as integer or default
+	 */
+	private function get_dual_int_field( $data, $primary, $fallback, $default = 0 ) {
+		if ( isset( $data[ $primary ] ) ) {
+			return (int) $data[ $primary ];
+		}
+		if ( isset( $data[ $fallback ] ) ) {
+			return (int) $data[ $fallback ];
 		}
 		return $default;
 	}
