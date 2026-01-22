@@ -134,6 +134,7 @@ class HIP_Ad_Admin {
 			check_admin_referer( 'hip_ad_settings_save', 'hip_ad_settings_nonce' );
 			
 			$settings = array();
+			$settings['ads_enabled'] = isset( $_POST['ads_enabled'] ) ? 1 : 0;
 			$settings['network_code'] = isset( $_POST['network_code'] ) ? sanitize_text_field( $_POST['network_code'] ) : '';
 			$settings['site_name'] = isset( $_POST['site_name'] ) ? sanitize_text_field( $_POST['site_name'] ) : '';
 			$settings['enable_lazy_load'] = isset( $_POST['enable_lazy_load'] ) ? 1 : 0;

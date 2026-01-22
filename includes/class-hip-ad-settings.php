@@ -49,6 +49,8 @@ class HIP_Ad_Settings {
 	public function sanitize_settings( $input ) {
 		$sanitized = array();
 
+		$sanitized['ads_enabled'] = isset( $input['ads_enabled'] ) ? 1 : 0;
+
 		if ( isset( $input['network_code'] ) ) {
 			$sanitized['network_code'] = sanitize_text_field( $input['network_code'] );
 		}
