@@ -135,12 +135,25 @@ class HIP_Ad_REST_API {
 		$settings = get_option( 'hip_ad_manager_settings', array() );
 		$debug_mode = isset( $settings['debug_mode'] ) ? (bool) $settings['debug_mode'] : false;
 
+		// Fetch all active slots
+		$slots = $this->fetch_slots_from_db( array() );
+
 		$config = array(
+			// Keep both camelCase AND snake_case for backward compatibility
 			'networkCode'         => isset( $settings['network_code'] ) ? $settings['network_code'] : '',
+			'network_code'        => isset( $settings['network_code'] ) ? $settings['network_code'] : '',
 			'siteName'            => isset( $settings['site_name'] ) ? $settings['site_name'] : '',
+			'site_name'           => isset( $settings['site_name'] ) ? $settings['site_name'] : '',
 			'enableLazyLoad'      => isset( $settings['enable_lazy_load'] ) ? (bool) $settings['enable_lazy_load'] : true,
 			'enableSingleRequest' => isset( $settings['enable_single_request'] ) ? (bool) $settings['enable_single_request'] : true,
+			'single_request'      => isset( $settings['enable_single_request'] ) ? (bool) $settings['enable_single_request'] : true,
 			'globalTargeting'     => isset( $settings['global_targeting'] ) ? json_decode( $settings['global_targeting'], true ) : new stdClass(),
+			'collapse_empty'      => true,
+			'enable_services'     => true,
+			'debug_mode'          => $debug_mode,
+			'property_code'       => isset( $settings['site_name'] ) ? $settings['site_name'] : 'default',
+			
+			// Lazy load config in both formats
 			'lazyLoadConfig'      => array(
 				'enabled'            => isset( $settings['enable_lazy_load'] ) ? (bool) $settings['enable_lazy_load'] : true,
 				'strategy'           => 'intersection',
@@ -149,6 +162,15 @@ class HIP_Ad_REST_API {
 				'mobileScaling'      => 2.0,
 				'idleTimeout'        => 200,
 			),
+			'lazy_load' => array(
+				'enabled'        => isset( $settings['enable_lazy_load'] ) ? (bool) $settings['enable_lazy_load'] : true,
+				'fetch_margin'   => 500,
+				'render_margin'  => 200,
+				'mobile_scaling' => 2.0,
+			),
+			
+			// IMPORTANT: Include slots in config response!
+			'slots' => $this->format_slots_for_frontend( isset( $slots['slots'] ) ? $slots['slots'] : array() ),
 		);
 
 		// Add debug information if debug mode is enabled
@@ -159,11 +181,14 @@ class HIP_Ad_REST_API {
 				'cacheStatus'   => $this->get_cache_status(),
 				'phpVersion'    => PHP_VERSION,
 				'wpVersion'     => get_bloginfo( 'version' ),
-				'pluginVersion' => HIP_AD_MANAGER_VERSION,
+				'pluginVersion' => defined( 'HIP_AD_MANAGER_VERSION' ) ? HIP_AD_MANAGER_VERSION : '1.0.0',
+				'slotsCount'    => count( isset( $slots['slots'] ) ? $slots['slots'] : array() ),
 			);
 		}
 
-		return new WP_REST_Response( $config, 200 );
+		return new WP_REST_Response( $config, 200, array(
+			'Cache-Control' => 'public, max-age=3600',
+		) );
 	}
 
 	/**
@@ -509,5 +534,93 @@ class HIP_Ad_REST_API {
 		);
 		
 		return implode( ', ', $labels );
+	}
+
+	/**
+	 * Format slots array for frontend consumption
+	 * Ensures both camelCase and snake_case keys for compatibility
+	 *
+	 * @param array $slots Raw slots from database
+	 * @return array Formatted slots
+	 */
+	private function format_slots_for_frontend( $slots ) {
+		if ( empty( $slots ) ) {
+			return array();
+		}
+		
+		$formatted = array();
+		
+		foreach ( $slots as $slot ) {
+			// Ensure slot has required fields
+			$formatted_slot = array(
+				// IDs
+				'id'           => isset( $slot['id'] ) ? $slot['id'] : '',
+				'slot_id'      => isset( $slot['slot_id'] ) ? $slot['slot_id'] : ( isset( $slot['slotId'] ) ? $slot['slotId'] : '' ),
+				'slotId'       => isset( $slot['slotId'] ) ? $slot['slotId'] : ( isset( $slot['slot_id'] ) ? $slot['slot_id'] : '' ),
+				
+				// Name and path
+				'name'         => isset( $slot['name'] ) ? $slot['name'] : '',
+				'ad_unit_path' => isset( $slot['ad_unit_path'] ) ? $slot['ad_unit_path'] : ( isset( $slot['adUnitPath'] ) ? $slot['adUnitPath'] : '' ),
+				'adUnitPath'   => isset( $slot['adUnitPath'] ) ? $slot['adUnitPath'] : ( isset( $slot['ad_unit_path'] ) ? $slot['ad_unit_path'] : '' ),
+				
+				// Sizes - ensure proper format
+				'sizes'        => $this->format_sizes( isset( $slot['sizes'] ) ? $slot['sizes'] : array() ),
+				'size_mapping' => isset( $slot['size_mapping'] ) ? $slot['size_mapping'] : ( isset( $slot['sizeMappings'] ) ? $slot['sizeMappings'] : array() ),
+				'sizeMappings' => isset( $slot['sizeMappings'] ) ? $slot['sizeMappings'] : ( isset( $slot['size_mapping'] ) ? $slot['size_mapping'] : array() ),
+				
+				// Placement and device
+				'placement'    => isset( $slot['placement'] ) ? $slot['placement'] : 'in-content',
+				'devices'      => isset( $slot['devices'] ) ? $slot['devices'] : ( isset( $slot['device'] ) ? array( $slot['device'] ) : array( 'desktop', 'tablet', 'mobile' ) ),
+				'device'       => isset( $slot['device'] ) ? $slot['device'] : 'all',
+				
+				// Targeting
+				'targeting'    => isset( $slot['targeting'] ) ? $slot['targeting'] : array(),
+				
+				// Settings
+				'lazy_load'       => isset( $slot['lazy_load'] ) ? (bool) $slot['lazy_load'] : true,
+				'lazyLoad'        => isset( $slot['lazyLoad'] ) ? (bool) $slot['lazyLoad'] : ( isset( $slot['lazy_load'] ) ? (bool) $slot['lazy_load'] : true ),
+				'refresh_interval' => isset( $slot['refresh_interval'] ) ? (int) $slot['refresh_interval'] : 0,
+				'min_height'      => isset( $slot['min_height'] ) ? (int) $slot['min_height'] : ( isset( $slot['minHeight'] ) ? (int) $slot['minHeight'] : 0 ),
+				'minHeight'       => isset( $slot['minHeight'] ) ? (int) $slot['minHeight'] : ( isset( $slot['min_height'] ) ? (int) $slot['min_height'] : 0 ),
+				
+				// Status
+				'enabled'      => isset( $slot['enabled'] ) ? (bool) $slot['enabled'] : ( isset( $slot['status'] ) ? ( $slot['status'] === 'active' ) : true ),
+				'status'       => isset( $slot['status'] ) ? $slot['status'] : 'active',
+				'priority'     => isset( $slot['priority'] ) ? (int) $slot['priority'] : 10,
+			);
+			
+			$formatted[] = $formatted_slot;
+		}
+		
+		return $formatted;
+	}
+
+	/**
+	 * Format sizes to ensure consistent structure
+	 *
+	 * @param mixed $sizes Raw sizes data
+	 * @return array Formatted sizes array
+	 */
+	private function format_sizes( $sizes ) {
+		if ( empty( $sizes ) ) {
+			return array();
+		}
+		
+		// If already in correct format [[width, height], ...]
+		if ( is_array( $sizes ) && isset( $sizes[0] ) && is_array( $sizes[0] ) ) {
+			return array_map( function( $size ) {
+				return array(
+					'width'  => isset( $size[0] ) ? (int) $size[0] : ( isset( $size['width'] ) ? (int) $size['width'] : 0 ),
+					'height' => isset( $size[1] ) ? (int) $size[1] : ( isset( $size['height'] ) ? (int) $size['height'] : 0 ),
+				);
+			}, $sizes );
+		}
+		
+		// If in object format [{width, height}, ...]
+		if ( is_array( $sizes ) && isset( $sizes[0]['width'] ) ) {
+			return $sizes;
+		}
+		
+		return array();
 	}
 }
