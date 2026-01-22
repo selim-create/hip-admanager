@@ -192,7 +192,7 @@ class HIP_Ad_REST_API {
 				'phpVersion'    => PHP_VERSION,
 				'wpVersion'     => get_bloginfo( 'version' ),
 				'pluginVersion' => HIP_AD_MANAGER_VERSION,
-				'slotsCount'    => count( isset( $slots['slots'] ) ? $slots['slots'] : array() ),
+				'slotsCount'    => count( $slots ),
 			);
 		}
 
