@@ -677,12 +677,7 @@ class HIP_Ad_REST_API {
 		
 		// If already in correct format [[width, height], ...]
 		if ( is_array( $sizes ) && isset( $sizes[0] ) && is_array( $sizes[0] ) ) {
-			return array_map( function( $size ) {
-				return array(
-					'width'  => isset( $size[0] ) ? (int) $size[0] : ( isset( $size['width'] ) ? (int) $size['width'] : 0 ),
-					'height' => isset( $size[1] ) ? (int) $size[1] : ( isset( $size['height'] ) ? (int) $size['height'] : 0 ),
-				);
-			}, $sizes );
+			return array_map( array( $this, 'format_single_size' ), $sizes );
 		}
 		
 		// If in object format [{width, height}, ...]
@@ -691,5 +686,35 @@ class HIP_Ad_REST_API {
 		}
 		
 		return array();
+	}
+
+	/**
+	 * Format a single size to ensure width/height structure
+	 *
+	 * @param array $size Size data (either [width, height] or {width, height})
+	 * @return array Formatted size with width and height keys
+	 */
+	private function format_single_size( $size ) {
+		$width = 0;
+		$height = 0;
+		
+		// Handle array format [width, height]
+		if ( isset( $size[0] ) ) {
+			$width = (int) $size[0];
+		} elseif ( isset( $size['width'] ) ) {
+			$width = (int) $size['width'];
+		}
+		
+		// Handle array format [width, height]
+		if ( isset( $size[1] ) ) {
+			$height = (int) $size[1];
+		} elseif ( isset( $size['height'] ) ) {
+			$height = (int) $size['height'];
+		}
+		
+		return array(
+			'width'  => $width,
+			'height' => $height,
+		);
 	}
 }
