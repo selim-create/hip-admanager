@@ -59,6 +59,7 @@ class HIP_Ad_Settings {
 
 		$sanitized['enable_lazy_load'] = isset( $input['enable_lazy_load'] ) ? 1 : 0;
 		$sanitized['enable_single_request'] = isset( $input['enable_single_request'] ) ? 1 : 0;
+		$sanitized['debug_mode'] = isset( $input['debug_mode'] ) ? 1 : 0;
 
 		if ( isset( $input['global_targeting'] ) ) {
 			$targeting = json_decode( stripslashes( $input['global_targeting'] ), true );
