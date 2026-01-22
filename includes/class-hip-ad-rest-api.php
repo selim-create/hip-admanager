@@ -181,7 +181,7 @@ class HIP_Ad_REST_API {
 				'cacheStatus'   => $this->get_cache_status(),
 				'phpVersion'    => PHP_VERSION,
 				'wpVersion'     => get_bloginfo( 'version' ),
-				'pluginVersion' => defined( 'HIP_AD_MANAGER_VERSION' ) ? HIP_AD_MANAGER_VERSION : '1.0.0',
+				'pluginVersion' => HIP_AD_MANAGER_VERSION,
 				'slotsCount'    => count( isset( $slots['slots'] ) ? $slots['slots'] : array() ),
 			);
 		}
@@ -551,40 +551,52 @@ class HIP_Ad_REST_API {
 		$formatted = array();
 		
 		foreach ( $slots as $slot ) {
-			// Ensure slot has required fields
+			// Determine devices array
+			$devices = isset( $slot['devices'] ) ? $slot['devices'] : array( 'desktop', 'tablet', 'mobile' );
+			if ( isset( $slot['device'] ) && ! isset( $slot['devices'] ) ) {
+				$devices = array( $slot['device'] );
+			}
+			
+			// Determine enabled status
+			$enabled = isset( $slot['enabled'] ) ? (bool) $slot['enabled'] : true;
+			if ( ! isset( $slot['enabled'] ) && isset( $slot['status'] ) ) {
+				$enabled = ( $slot['status'] === 'active' );
+			}
+			
+			// Build formatted slot with both naming conventions
 			$formatted_slot = array(
 				// IDs
 				'id'           => isset( $slot['id'] ) ? $slot['id'] : '',
-				'slot_id'      => isset( $slot['slot_id'] ) ? $slot['slot_id'] : ( isset( $slot['slotId'] ) ? $slot['slotId'] : '' ),
-				'slotId'       => isset( $slot['slotId'] ) ? $slot['slotId'] : ( isset( $slot['slot_id'] ) ? $slot['slot_id'] : '' ),
+				'slot_id'      => $this->get_dual_field( $slot, 'slot_id', 'slotId' ),
+				'slotId'       => $this->get_dual_field( $slot, 'slotId', 'slot_id' ),
 				
 				// Name and path
 				'name'         => isset( $slot['name'] ) ? $slot['name'] : '',
-				'ad_unit_path' => isset( $slot['ad_unit_path'] ) ? $slot['ad_unit_path'] : ( isset( $slot['adUnitPath'] ) ? $slot['adUnitPath'] : '' ),
-				'adUnitPath'   => isset( $slot['adUnitPath'] ) ? $slot['adUnitPath'] : ( isset( $slot['ad_unit_path'] ) ? $slot['ad_unit_path'] : '' ),
+				'ad_unit_path' => $this->get_dual_field( $slot, 'ad_unit_path', 'adUnitPath' ),
+				'adUnitPath'   => $this->get_dual_field( $slot, 'adUnitPath', 'ad_unit_path' ),
 				
 				// Sizes - ensure proper format
 				'sizes'        => $this->format_sizes( isset( $slot['sizes'] ) ? $slot['sizes'] : array() ),
-				'size_mapping' => isset( $slot['size_mapping'] ) ? $slot['size_mapping'] : ( isset( $slot['sizeMappings'] ) ? $slot['sizeMappings'] : array() ),
-				'sizeMappings' => isset( $slot['sizeMappings'] ) ? $slot['sizeMappings'] : ( isset( $slot['size_mapping'] ) ? $slot['size_mapping'] : array() ),
+				'size_mapping' => $this->get_dual_field( $slot, 'size_mapping', 'sizeMappings', array() ),
+				'sizeMappings' => $this->get_dual_field( $slot, 'sizeMappings', 'size_mapping', array() ),
 				
 				// Placement and device
 				'placement'    => isset( $slot['placement'] ) ? $slot['placement'] : 'in-content',
-				'devices'      => isset( $slot['devices'] ) ? $slot['devices'] : ( isset( $slot['device'] ) ? array( $slot['device'] ) : array( 'desktop', 'tablet', 'mobile' ) ),
+				'devices'      => $devices,
 				'device'       => isset( $slot['device'] ) ? $slot['device'] : 'all',
 				
 				// Targeting
 				'targeting'    => isset( $slot['targeting'] ) ? $slot['targeting'] : array(),
 				
 				// Settings
-				'lazy_load'       => isset( $slot['lazy_load'] ) ? (bool) $slot['lazy_load'] : true,
+				'lazy_load'       => isset( $slot['lazy_load'] ) ? (bool) $slot['lazy_load'] : ( isset( $slot['lazyLoad'] ) ? (bool) $slot['lazyLoad'] : true ),
 				'lazyLoad'        => isset( $slot['lazyLoad'] ) ? (bool) $slot['lazyLoad'] : ( isset( $slot['lazy_load'] ) ? (bool) $slot['lazy_load'] : true ),
 				'refresh_interval' => isset( $slot['refresh_interval'] ) ? (int) $slot['refresh_interval'] : 0,
-				'min_height'      => isset( $slot['min_height'] ) ? (int) $slot['min_height'] : ( isset( $slot['minHeight'] ) ? (int) $slot['minHeight'] : 0 ),
-				'minHeight'       => isset( $slot['minHeight'] ) ? (int) $slot['minHeight'] : ( isset( $slot['min_height'] ) ? (int) $slot['min_height'] : 0 ),
+				'min_height'      => $this->get_dual_field( $slot, 'min_height', 'minHeight', 0 ),
+				'minHeight'       => $this->get_dual_field( $slot, 'minHeight', 'min_height', 0 ),
 				
 				// Status
-				'enabled'      => isset( $slot['enabled'] ) ? (bool) $slot['enabled'] : ( isset( $slot['status'] ) ? ( $slot['status'] === 'active' ) : true ),
+				'enabled'      => $enabled,
 				'status'       => isset( $slot['status'] ) ? $slot['status'] : 'active',
 				'priority'     => isset( $slot['priority'] ) ? (int) $slot['priority'] : 10,
 			);
@@ -593,6 +605,25 @@ class HIP_Ad_REST_API {
 		}
 		
 		return $formatted;
+	}
+
+	/**
+	 * Get field value with fallback to alternative naming convention
+	 *
+	 * @param array  $data Array to search
+	 * @param string $primary Primary field name
+	 * @param string $fallback Fallback field name
+	 * @param mixed  $default Default value if neither exists
+	 * @return mixed Field value or default
+	 */
+	private function get_dual_field( $data, $primary, $fallback, $default = '' ) {
+		if ( isset( $data[ $primary ] ) ) {
+			return $data[ $primary ];
+		}
+		if ( isset( $data[ $fallback ] ) ) {
+			return $data[ $fallback ];
+		}
+		return $default;
 	}
 
 	/**
