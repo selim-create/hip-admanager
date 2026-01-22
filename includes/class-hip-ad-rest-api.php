@@ -152,7 +152,7 @@ class HIP_Ad_REST_API {
 			'enable_services'     => true,
 			'debug_mode'          => $debug_mode,
 			'property_code'       => isset( $settings['site_name'] ) ? $settings['site_name'] : 'default',
-			
+
 			// Lazy load config in both formats
 			'lazyLoadConfig'      => array(
 				'enabled'            => isset( $settings['enable_lazy_load'] ) ? (bool) $settings['enable_lazy_load'] : true,
@@ -168,7 +168,7 @@ class HIP_Ad_REST_API {
 				'render_margin'  => 200,
 				'mobile_scaling' => 2.0,
 			),
-			
+
 			// IMPORTANT: Include slots in config response!
 			'slots' => $this->format_slots_for_frontend( isset( $slots['slots'] ) ? $slots['slots'] : array() ),
 		);
@@ -698,14 +698,14 @@ class HIP_Ad_REST_API {
 		$width = 0;
 		$height = 0;
 		
-		// Handle array format [width, height]
+		// Handle width - array format [width, height] or object format {width, height}
 		if ( isset( $size[0] ) ) {
 			$width = (int) $size[0];
 		} elseif ( isset( $size['width'] ) ) {
 			$width = (int) $size['width'];
 		}
 		
-		// Handle array format [width, height]
+		// Handle height - array format [width, height] or object format {width, height}
 		if ( isset( $size[1] ) ) {
 			$height = (int) $size[1];
 		} elseif ( isset( $size['height'] ) ) {
