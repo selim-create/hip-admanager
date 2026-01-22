@@ -134,11 +134,20 @@ class HIP_Ad_REST_API {
 	public function get_config( $request ) {
 		$settings = get_option( 'hip_ad_manager_settings', array() );
 		$debug_mode = isset( $settings['debug_mode'] ) ? (bool) $settings['debug_mode'] : false;
+		$ads_enabled = isset( $settings['ads_enabled'] ) ? (bool) $settings['ads_enabled'] : true;
 
-		// Fetch all active slots
-		$slots = $this->fetch_slots_from_db( array() );
+		// Fetch all active slots only if ads are enabled
+		$slots = array();
+		if ( $ads_enabled ) {
+			$slots_data = $this->fetch_slots_from_db( array() );
+			$slots = $this->format_slots_for_frontend( isset( $slots_data['slots'] ) ? $slots_data['slots'] : array() );
+		}
 
 		$config = array(
+			// Ads enabled status (both formats for compatibility)
+			'ads_enabled'         => $ads_enabled,
+			'adsEnabled'          => $ads_enabled,
+			
 			// Keep both camelCase AND snake_case for backward compatibility
 			'networkCode'         => isset( $settings['network_code'] ) ? $settings['network_code'] : '',
 			'network_code'        => isset( $settings['network_code'] ) ? $settings['network_code'] : '',
@@ -151,6 +160,7 @@ class HIP_Ad_REST_API {
 			'collapse_empty'      => true,
 			'enable_services'     => true,
 			'debug_mode'          => $debug_mode,
+			'debugMode'           => $debug_mode,
 			'property_code'       => isset( $settings['site_name'] ) ? $settings['site_name'] : 'default',
 
 			// Lazy load config in both formats
@@ -169,8 +179,8 @@ class HIP_Ad_REST_API {
 				'mobile_scaling' => 2.0,
 			),
 
-			// IMPORTANT: Include slots in config response!
-			'slots' => $this->format_slots_for_frontend( isset( $slots['slots'] ) ? $slots['slots'] : array() ),
+			// IMPORTANT: Include slots in config response (empty if ads disabled)
+			'slots' => $slots,
 		);
 
 		// Add debug information if debug mode is enabled
@@ -182,7 +192,7 @@ class HIP_Ad_REST_API {
 				'phpVersion'    => PHP_VERSION,
 				'wpVersion'     => get_bloginfo( 'version' ),
 				'pluginVersion' => HIP_AD_MANAGER_VERSION,
-				'slotsCount'    => count( isset( $slots['slots'] ) ? $slots['slots'] : array() ),
+				'slotsCount'    => count( $slots ),
 			);
 		}
 

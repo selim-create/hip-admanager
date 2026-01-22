@@ -10,6 +10,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+$ads_enabled = isset( $settings['ads_enabled'] ) ? $settings['ads_enabled'] : 1; // Default: enabled
 $network_code = isset( $settings['network_code'] ) ? $settings['network_code'] : '';
 $site_name = isset( $settings['site_name'] ) ? $settings['site_name'] : '';
 $enable_lazy_load = isset( $settings['enable_lazy_load'] ) ? $settings['enable_lazy_load'] : 1;
@@ -24,6 +25,25 @@ $ads_txt_content = get_option( 'hip_ad_ads_txt_content', '' );
 
 	<form method="post" action="">
 		<?php wp_nonce_field( 'hip_ad_settings_save', 'hip_ad_settings_nonce' ); ?>
+
+		<h2><?php esc_html_e( 'Master Control', 'hip-admanager' ); ?></h2>
+
+		<table class="form-table">
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Enable Ads', 'hip-admanager' ); ?></th>
+				<td>
+					<label>
+						<input type="checkbox" name="ads_enabled" value="1" <?php checked( $ads_enabled, 1 ); ?> />
+						<strong><?php esc_html_e( 'Enable all advertisements', 'hip-admanager' ); ?></strong>
+					</label>
+					<p class="description" style="color: #d63638;">
+						<?php esc_html_e( 'Uncheck to disable ALL ads site-wide. This is a master switch that overrides individual slot settings.', 'hip-admanager' ); ?>
+					</p>
+				</td>
+			</tr>
+		</table>
+
+		<hr>
 
 		<h2><?php esc_html_e( 'General Settings', 'hip-admanager' ); ?></h2>
 		
