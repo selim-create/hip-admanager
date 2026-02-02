@@ -327,10 +327,10 @@ class HIP_Ad_Slot {
 		}
 		
 		// Clear REST API cache when slot is saved
-		if ( class_exists( 'HIP_Ad_REST_API' ) ) {
-			$api = new HIP_Ad_REST_API();
-			if ( method_exists( $api, 'clear_slots_cache' ) ) {
-				$api->clear_slots_cache();
+		if ( class_exists( 'HIP_Ad_Manager' ) ) {
+			$manager = HIP_Ad_Manager::get_instance();
+			if ( isset( $manager->rest_api ) && method_exists( $manager->rest_api, 'clear_slots_cache' ) ) {
+				$manager->rest_api->clear_slots_cache();
 			}
 		}
 	}

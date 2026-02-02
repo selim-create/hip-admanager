@@ -753,8 +753,8 @@ class HIP_Ad_REST_API {
 			$viewport = array( 0, 0 );
 			if ( isset( $mapping['viewport'] ) && is_array( $mapping['viewport'] ) ) {
 				$viewport = array(
-					(int) ( isset( $mapping['viewport'][0] ) ? $mapping['viewport'][0] : 0 ),
-					(int) ( isset( $mapping['viewport'][1] ) ? $mapping['viewport'][1] : 0 )
+					(int) ( $mapping['viewport'][0] ?? 0 ),
+					(int) ( $mapping['viewport'][1] ?? 0 )
 				);
 			}
 			
