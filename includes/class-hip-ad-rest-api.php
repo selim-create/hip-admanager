@@ -587,9 +587,17 @@ class HIP_Ad_REST_API {
 				
 				// Sizes - ensure proper format
 				'sizes'        => $this->format_sizes( isset( $slot['sizes'] ) ? $slot['sizes'] : array() ),
-				'size_mapping' => $this->get_dual_field( $slot, 'size_mapping', 'sizeMappings', array() ),
-				'sizeMappings' => $this->get_dual_field( $slot, 'sizeMappings', 'size_mapping', array() ),
-				
+			);
+			
+			// Properly normalize size_mapping/sizeMappings
+			$raw_size_mapping = $this->get_dual_field( $slot, 'size_mapping', 'sizeMappings', array() );
+			$normalized_size_mapping = $this->normalize_size_mappings_for_api( $raw_size_mapping );
+			
+			$formatted_slot['size_mapping'] = $normalized_size_mapping;
+			$formatted_slot['sizeMappings'] = $normalized_size_mapping;
+			
+			// Continue with rest of the slot data
+			$formatted_slot = array_merge( $formatted_slot, array(
 				// Placement and device
 				'placement'    => isset( $slot['placement'] ) ? $slot['placement'] : 'in-content',
 				'devices'      => $devices,
@@ -609,7 +617,7 @@ class HIP_Ad_REST_API {
 				'enabled'      => $enabled,
 				'status'       => isset( $slot['status'] ) ? $slot['status'] : 'active',
 				'priority'     => isset( $slot['priority'] ) ? (int) $slot['priority'] : 10,
-			);
+			) );
 			
 			$formatted[] = $formatted_slot;
 		}
@@ -685,46 +693,87 @@ class HIP_Ad_REST_API {
 			return array();
 		}
 		
-		// If already in correct format [[width, height], ...]
-		if ( is_array( $sizes ) && isset( $sizes[0] ) && is_array( $sizes[0] ) ) {
-			return array_map( array( $this, 'format_single_size' ), $sizes );
+		// If it's a string (shouldn't happen but just in case)
+		if ( is_string( $sizes ) ) {
+			$sizes = json_decode( $sizes, true );
+			if ( ! is_array( $sizes ) ) {
+				return array();
+			}
 		}
 		
-		// If in object format [{width, height}, ...]
-		if ( is_array( $sizes ) && isset( $sizes[0]['width'] ) ) {
-			return $sizes;
+		$formatted = array();
+		foreach ( $sizes as $size ) {
+			$width = 0;
+			$height = 0;
+			
+			if ( is_array( $size ) ) {
+				// Array format: [width, height]
+				if ( isset( $size[0] ) && isset( $size[1] ) ) {
+					$width = (int) $size[0];
+					$height = (int) $size[1];
+				}
+				// Object/Associative format: ['width' => x, 'height' => y]
+				elseif ( isset( $size['width'] ) && isset( $size['height'] ) ) {
+					$width = (int) $size['width'];
+					$height = (int) $size['height'];
+				}
+			}
+			
+			// Only add valid sizes
+			if ( $width > 0 && $height > 0 ) {
+				$formatted[] = array(
+					'width'  => $width,
+					'height' => $height,
+				);
+			}
 		}
 		
-		return array();
+		return $formatted;
 	}
-
+	
 	/**
-	 * Format a single size to ensure width/height structure
+	 * Normalize size mappings for API response
+	 * Ensures consistent format that frontend can parse
 	 *
-	 * @param array $size Size data (either [width, height] or {width, height})
-	 * @return array Formatted size with width and height keys
+	 * @param array $mappings Size mappings array to normalize
+	 * @return array Normalized size mappings array
 	 */
-	private function format_single_size( $size ) {
-		$width = 0;
-		$height = 0;
-		
-		// Handle width - array format [width, height] or object format {width, height}
-		if ( isset( $size[0] ) ) {
-			$width = (int) $size[0];
-		} elseif ( isset( $size['width'] ) ) {
-			$width = (int) $size['width'];
+	private function normalize_size_mappings_for_api( $mappings ) {
+		if ( empty( $mappings ) || ! is_array( $mappings ) ) {
+			return array();
 		}
 		
-		// Handle height - array format [width, height] or object format {width, height}
-		if ( isset( $size[1] ) ) {
-			$height = (int) $size[1];
-		} elseif ( isset( $size['height'] ) ) {
-			$height = (int) $size['height'];
+		$normalized = array();
+		foreach ( $mappings as $mapping ) {
+			if ( ! is_array( $mapping ) ) {
+				continue;
+			}
+			
+			// Get viewport, ensuring it's [width, height] format
+			$viewport = array( 0, 0 );
+			if ( isset( $mapping['viewport'] ) && is_array( $mapping['viewport'] ) ) {
+				$viewport = array(
+					(int) ( isset( $mapping['viewport'][0] ) ? $mapping['viewport'][0] : 0 ),
+					(int) ( isset( $mapping['viewport'][1] ) ? $mapping['viewport'][1] : 0 )
+				);
+			}
+			
+			// Normalize sizes within the mapping
+			$sizes = array();
+			if ( isset( $mapping['sizes'] ) ) {
+				if ( $mapping['sizes'] === 'fluid' ) {
+					$sizes = 'fluid';
+				} elseif ( is_array( $mapping['sizes'] ) ) {
+					$sizes = $this->format_sizes( $mapping['sizes'] );
+				}
+			}
+			
+			$normalized[] = array(
+				'viewport' => $viewport,
+				'sizes'    => $sizes,
+			);
 		}
 		
-		return array(
-			'width'  => $width,
-			'height' => $height,
-		);
+		return $normalized;
 	}
 }
