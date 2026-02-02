@@ -164,6 +164,14 @@ class HIP_Ad_REST_API {
 			'debugMode'           => $debug_mode,
 			'property_code'       => isset( $settings['site_name'] ) ? $settings['site_name'] : 'default',
 
+			// Placement groups for hierarchical placement system
+			'placement_groups'    => array(
+				'header'  => array( 'header-leaderboard', 'header-masthead', 'header-mobile' ),
+				'sidebar' => array( 'sidebar-top', 'sidebar-middle', 'sidebar-bottom', 'sidebar-sticky' ),
+				'content' => array( 'content-top', 'content-after-hero', 'content-in-feed', 'content-after-section', 'content-middle', 'content-bottom' ),
+				'footer'  => array( 'footer-banner', 'footer-sticky-mobile' ),
+			),
+
 			// Lazy load config in both formats
 			'lazyLoadConfig'      => array(
 				'enabled'            => isset( $settings['enable_lazy_load'] ) ? (bool) $settings['enable_lazy_load'] : true,
@@ -497,6 +505,9 @@ class HIP_Ad_REST_API {
 			'_hip_ad_refresh_enabled',
 			'_hip_ad_refresh_interval',
 			'_hip_ad_max_refreshes',
+			'_hip_ad_zone',
+			'_hip_ad_position',
+			'_hip_ad_page_types',
 		);
 		
 		foreach ( $allowed_meta_keys as $key ) {

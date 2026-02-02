@@ -135,6 +135,33 @@ class HIP_Ad_Slot {
 			'side',
 			'default'
 		);
+
+		add_meta_box(
+			'hip_ad_zone',
+			__( 'Zone (Optional)', 'hip-admanager' ),
+			array( $this, 'render_zone_metabox' ),
+			self::POST_TYPE,
+			'side',
+			'default'
+		);
+
+		add_meta_box(
+			'hip_ad_position',
+			__( 'Position Order', 'hip-admanager' ),
+			array( $this, 'render_position_metabox' ),
+			self::POST_TYPE,
+			'side',
+			'default'
+		);
+
+		add_meta_box(
+			'hip_ad_page_types',
+			__( 'Show on Page Types', 'hip-admanager' ),
+			array( $this, 'render_page_types_metabox' ),
+			self::POST_TYPE,
+			'side',
+			'default'
+		);
 	}
 
 	/**
@@ -234,6 +261,41 @@ class HIP_Ad_Slot {
 	}
 
 	/**
+	 * Render Zone metabox
+	 */
+	public function render_zone_metabox( $post ) {
+		$hip_ad_zone = get_post_meta( $post->ID, '_hip_ad_zone', true );
+		
+		include HIP_AD_MANAGER_PLUGIN_DIR . 'admin/views/metaboxes/zone.php';
+	}
+
+	/**
+	 * Render Position metabox
+	 */
+	public function render_position_metabox( $post ) {
+		$hip_ad_position = get_post_meta( $post->ID, '_hip_ad_position', true );
+		
+		if ( empty( $hip_ad_position ) ) {
+			$hip_ad_position = '10';
+		}
+		
+		include HIP_AD_MANAGER_PLUGIN_DIR . 'admin/views/metaboxes/position.php';
+	}
+
+	/**
+	 * Render Page Types metabox
+	 */
+	public function render_page_types_metabox( $post ) {
+		$hip_ad_page_types = get_post_meta( $post->ID, '_hip_ad_page_types', true );
+		
+		if ( empty( $hip_ad_page_types ) || ! is_array( $hip_ad_page_types ) ) {
+			$hip_ad_page_types = array( 'all' );
+		}
+		
+		include HIP_AD_MANAGER_PLUGIN_DIR . 'admin/views/metaboxes/page-types.php';
+	}
+
+	/**
 	 * Save meta boxes
 	 */
 	public function save_meta_boxes( $post_id, $post ) {
@@ -326,6 +388,25 @@ class HIP_Ad_Slot {
 			update_post_meta( $post_id, '_hip_ad_max_refreshes', absint( $_POST['hip_ad_max_refreshes'] ) );
 		}
 		
+		// Save zone
+		if ( isset( $_POST['hip_ad_zone'] ) ) {
+			update_post_meta( $post_id, '_hip_ad_zone', sanitize_text_field( $_POST['hip_ad_zone'] ) );
+		}
+		
+		// Save position
+		if ( isset( $_POST['hip_ad_position'] ) ) {
+			update_post_meta( $post_id, '_hip_ad_position', absint( $_POST['hip_ad_position'] ) );
+		}
+		
+		// Save page types
+		if ( isset( $_POST['hip_ad_page_types'] ) && is_array( $_POST['hip_ad_page_types'] ) ) {
+			$page_types = array_map( 'sanitize_text_field', $_POST['hip_ad_page_types'] );
+			update_post_meta( $post_id, '_hip_ad_page_types', $page_types );
+		} else {
+			// If no checkboxes are checked, save empty array
+			update_post_meta( $post_id, '_hip_ad_page_types', array() );
+		}
+		
 		// Clear REST API cache when slot is saved
 		if ( class_exists( 'HIP_Ad_Manager' ) ) {
 			$manager = HIP_Ad_Manager::get_instance();
@@ -392,6 +473,9 @@ class HIP_Ad_Slot {
 			'placement'           => get_post_meta( $post->ID, 'gam_placement', true ),
 			'device'              => get_post_meta( $post->ID, 'gam_device', true ),
 			'priority'            => (int) get_post_meta( $post->ID, 'gam_priority', true ),
+			'zone'                => get_post_meta( $post->ID, '_hip_ad_zone', true ) ?: '',
+			'position'            => (int) get_post_meta( $post->ID, '_hip_ad_position', true ) ?: 10,
+			'page_types'          => get_post_meta( $post->ID, '_hip_ad_page_types', true ) ?: array( 'all' ),
 			'minHeight'           => self::calculate_min_height( $sizes_array ),
 			'responsiveMinHeight' => self::calculate_responsive_min_height( $size_mappings_array ),
 			'placeholder'         => array(
@@ -633,12 +717,39 @@ class HIP_Ad_Slot {
 					$placement = '—';
 				}
 				$placement_labels = array(
+					// Header
+					'header-leaderboard' => __( 'Header - Leaderboard', 'hip-admanager' ),
+					'header-masthead' => __( 'Header - Masthead', 'hip-admanager' ),
+					'header-mobile' => __( 'Header - Mobile', 'hip-admanager' ),
+					
+					// Sidebar
+					'sidebar-top' => __( 'Sidebar - Top', 'hip-admanager' ),
+					'sidebar-middle' => __( 'Sidebar - Middle', 'hip-admanager' ),
+					'sidebar-bottom' => __( 'Sidebar - Bottom', 'hip-admanager' ),
+					'sidebar-sticky' => __( 'Sidebar - Sticky', 'hip-admanager' ),
+					
+					// Content
+					'content-top' => __( 'Content - Top', 'hip-admanager' ),
+					'content-after-hero' => __( 'Content - After Hero', 'hip-admanager' ),
+					'content-in-feed' => __( 'Content - In Feed', 'hip-admanager' ),
+					'content-after-section' => __( 'Content - After Section', 'hip-admanager' ),
+					'content-middle' => __( 'Content - Middle', 'hip-admanager' ),
+					'content-bottom' => __( 'Content - Bottom', 'hip-admanager' ),
+					
+					// Footer
+					'footer-banner' => __( 'Footer - Banner', 'hip-admanager' ),
+					'footer-sticky-mobile' => __( 'Footer - Sticky Mobile', 'hip-admanager' ),
+					
+					// Special
+					'interstitial' => __( 'Interstitial', 'hip-admanager' ),
+					'native' => __( 'Native Ad', 'hip-admanager' ),
+					
+					// Legacy
 					'header' => __( 'Header', 'hip-admanager' ),
 					'sidebar' => __( 'Sidebar', 'hip-admanager' ),
 					'in-content' => __( 'In-Content', 'hip-admanager' ),
 					'footer' => __( 'Footer', 'hip-admanager' ),
 					'mobile-sticky' => __( 'Mobile Sticky', 'hip-admanager' ),
-					'interstitial' => __( 'Interstitial', 'hip-admanager' ),
 				);
 				echo esc_html( isset( $placement_labels[ $placement ] ) ? $placement_labels[ $placement ] : $placement );
 				break;
@@ -687,12 +798,39 @@ class HIP_Ad_Slot {
 		// Placement filter
 		$current_placement = isset( $_GET['filter_placement'] ) ? sanitize_text_field( $_GET['filter_placement'] ) : '';
 		$placements = array(
-			'header' => __( 'Header', 'hip-admanager' ),
-			'sidebar' => __( 'Sidebar', 'hip-admanager' ),
-			'in-content' => __( 'In-Content', 'hip-admanager' ),
-			'footer' => __( 'Footer', 'hip-admanager' ),
-			'mobile-sticky' => __( 'Mobile Sticky', 'hip-admanager' ),
+			// Header
+			'header-leaderboard' => __( 'Header - Leaderboard', 'hip-admanager' ),
+			'header-masthead' => __( 'Header - Masthead', 'hip-admanager' ),
+			'header-mobile' => __( 'Header - Mobile', 'hip-admanager' ),
+			
+			// Sidebar
+			'sidebar-top' => __( 'Sidebar - Top', 'hip-admanager' ),
+			'sidebar-middle' => __( 'Sidebar - Middle', 'hip-admanager' ),
+			'sidebar-bottom' => __( 'Sidebar - Bottom', 'hip-admanager' ),
+			'sidebar-sticky' => __( 'Sidebar - Sticky', 'hip-admanager' ),
+			
+			// Content
+			'content-top' => __( 'Content - Top', 'hip-admanager' ),
+			'content-after-hero' => __( 'Content - After Hero', 'hip-admanager' ),
+			'content-in-feed' => __( 'Content - In Feed', 'hip-admanager' ),
+			'content-after-section' => __( 'Content - After Section', 'hip-admanager' ),
+			'content-middle' => __( 'Content - Middle', 'hip-admanager' ),
+			'content-bottom' => __( 'Content - Bottom', 'hip-admanager' ),
+			
+			// Footer
+			'footer-banner' => __( 'Footer - Banner', 'hip-admanager' ),
+			'footer-sticky-mobile' => __( 'Footer - Sticky Mobile', 'hip-admanager' ),
+			
+			// Special
 			'interstitial' => __( 'Interstitial', 'hip-admanager' ),
+			'native' => __( 'Native Ad', 'hip-admanager' ),
+			
+			// Legacy
+			'header' => __( 'Header (Legacy)', 'hip-admanager' ),
+			'sidebar' => __( 'Sidebar (Legacy)', 'hip-admanager' ),
+			'in-content' => __( 'In-Content (Legacy)', 'hip-admanager' ),
+			'footer' => __( 'Footer (Legacy)', 'hip-admanager' ),
+			'mobile-sticky' => __( 'Mobile Sticky (Legacy)', 'hip-admanager' ),
 		);
 		?>
 		<select name="filter_placement">
