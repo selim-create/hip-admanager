@@ -325,6 +325,14 @@ class HIP_Ad_Slot {
 		if ( isset( $_POST['hip_ad_max_refreshes'] ) ) {
 			update_post_meta( $post_id, '_hip_ad_max_refreshes', absint( $_POST['hip_ad_max_refreshes'] ) );
 		}
+		
+		// Clear REST API cache when slot is saved
+		if ( class_exists( 'HIP_Ad_Manager' ) ) {
+			$manager = HIP_Ad_Manager::get_instance();
+			if ( isset( $manager->rest_api ) && method_exists( $manager->rest_api, 'clear_slots_cache' ) ) {
+				$manager->rest_api->clear_slots_cache();
+			}
+		}
 	}
 
 	/**
@@ -364,9 +372,13 @@ class HIP_Ad_Slot {
 		$size_mappings = get_post_meta( $post->ID, 'gam_size_mappings', true );
 		$targeting = get_post_meta( $post->ID, 'gam_targeting', true );
 		
-		// Decode sizes
+		// Decode and normalize sizes
 		$sizes_array = ! empty( $sizes ) ? json_decode( $sizes, true ) : array();
+		$sizes_array = self::normalize_sizes( $sizes_array );
+		
+		// Decode and normalize size mappings
 		$size_mappings_array = ! empty( $size_mappings ) ? json_decode( $size_mappings, true ) : array();
+		$size_mappings_array = self::normalize_size_mappings( $size_mappings_array );
 
 		return array(
 			'id'                  => $post->ID,
@@ -404,6 +416,81 @@ class HIP_Ad_Slot {
 				'idleTimeout'        => 200,
 			),
 		);
+	}
+	
+	/**
+	 * Normalize sizes to consistent [[width, height], ...] array format
+	 * Handles both [width, height] array format and {width: x, height: y} object format
+	 *
+	 * @param array $sizes Sizes array to normalize
+	 * @return array Normalized sizes array
+	 */
+	private static function normalize_sizes( $sizes ) {
+		if ( empty( $sizes ) || ! is_array( $sizes ) ) {
+			return array();
+		}
+		
+		$normalized = array();
+		foreach ( $sizes as $size ) {
+			if ( is_array( $size ) ) {
+				// Array format: [width, height]
+				if ( isset( $size[0] ) && isset( $size[1] ) ) {
+					$normalized[] = array( (int) $size[0], (int) $size[1] );
+				}
+				// Object format: ['width' => x, 'height' => y]
+				elseif ( isset( $size['width'] ) && isset( $size['height'] ) ) {
+					$normalized[] = array( (int) $size['width'], (int) $size['height'] );
+				}
+			}
+		}
+		
+		return $normalized;
+	}
+	
+	/**
+	 * Normalize size mappings to consistent format
+	 * Ensures viewport is [width, height] and sizes are [[width, height], ...]
+	 *
+	 * @param array $mappings Size mappings array to normalize
+	 * @return array Normalized size mappings array
+	 */
+	private static function normalize_size_mappings( $mappings ) {
+		if ( empty( $mappings ) || ! is_array( $mappings ) ) {
+			return array();
+		}
+		
+		$normalized = array();
+		foreach ( $mappings as $mapping ) {
+			if ( ! is_array( $mapping ) ) {
+				continue;
+			}
+			
+			// Normalize viewport
+			$viewport = array( 0, 0 );
+			if ( isset( $mapping['viewport'] ) && is_array( $mapping['viewport'] ) ) {
+				$viewport = array(
+					(int) ( $mapping['viewport'][0] ?? 0 ),
+					(int) ( $mapping['viewport'][1] ?? 0 )
+				);
+			}
+			
+			// Normalize sizes within mapping
+			$sizes = array();
+			if ( isset( $mapping['sizes'] ) ) {
+				if ( $mapping['sizes'] === 'fluid' ) {
+					$sizes = 'fluid';
+				} else {
+					$sizes = self::normalize_sizes( $mapping['sizes'] );
+				}
+			}
+			
+			$normalized[] = array(
+				'viewport' => $viewport,
+				'sizes'    => $sizes,
+			);
+		}
+		
+		return $normalized;
 	}
 	
 	/**
