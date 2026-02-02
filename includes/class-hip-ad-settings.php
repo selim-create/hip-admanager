@@ -61,6 +61,7 @@ class HIP_Ad_Settings {
 
 		$sanitized['enable_lazy_load'] = ! empty( $input['enable_lazy_load'] ) ? 1 : 0;
 		$sanitized['enable_single_request'] = ! empty( $input['enable_single_request'] ) ? 1 : 0;
+		$sanitized['enable_services'] = ! empty( $input['enable_services'] ) ? 1 : 0;
 		$sanitized['debug_mode'] = ! empty( $input['debug_mode'] ) ? 1 : 0;
 
 		if ( isset( $input['global_targeting'] ) ) {

@@ -15,6 +15,7 @@ $network_code = isset( $settings['network_code'] ) ? $settings['network_code'] :
 $site_name = isset( $settings['site_name'] ) ? $settings['site_name'] : '';
 $enable_lazy_load = isset( $settings['enable_lazy_load'] ) ? $settings['enable_lazy_load'] : 1;
 $enable_single_request = isset( $settings['enable_single_request'] ) ? $settings['enable_single_request'] : 1;
+$enable_services = isset( $settings['enable_services'] ) ? $settings['enable_services'] : 1;
 $global_targeting = isset( $settings['global_targeting'] ) ? $settings['global_targeting'] : '{}';
 $cache_duration = isset( $settings['cache_duration'] ) ? $settings['cache_duration'] : 3600;
 $debug_mode = isset( $settings['debug_mode'] ) ? $settings['debug_mode'] : 0;
@@ -85,6 +86,19 @@ $ads_txt_content = get_option( 'hip_ad_ads_txt_content', '' );
 						<input type="checkbox" name="enable_single_request" value="1" <?php checked( $enable_single_request, 1 ); ?> />
 						<?php esc_html_e( 'Enable single request mode (SRA)', 'hip-admanager' ); ?>
 					</label>
+				</td>
+			</tr>
+
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Enable Services', 'hip-admanager' ); ?></th>
+				<td>
+					<label>
+						<input type="checkbox" name="enable_services" value="1" <?php checked( $enable_services, 1 ); ?> />
+						<?php esc_html_e( 'Enable GPT services (required for ads to display)', 'hip-admanager' ); ?>
+					</label>
+					<p class="description">
+						<?php esc_html_e( 'When enabled, googletag.enableServices() will be called to activate ad rendering.', 'hip-admanager' ); ?>
+					</p>
 				</td>
 			</tr>
 
