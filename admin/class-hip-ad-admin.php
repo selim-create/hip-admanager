@@ -139,6 +139,7 @@ class HIP_Ad_Admin {
 			$settings['site_name'] = isset( $_POST['site_name'] ) ? sanitize_text_field( $_POST['site_name'] ) : '';
 			$settings['enable_lazy_load'] = isset( $_POST['enable_lazy_load'] ) ? 1 : 0;
 			$settings['enable_single_request'] = isset( $_POST['enable_single_request'] ) ? 1 : 0;
+			$settings['enable_services'] = isset( $_POST['enable_services'] ) ? 1 : 0;
 			$settings['debug_mode'] = isset( $_POST['debug_mode'] ) ? 1 : 0;
 			
 			if ( isset( $_POST['global_targeting'] ) ) {
