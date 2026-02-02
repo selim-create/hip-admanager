@@ -403,8 +403,8 @@ class HIP_Ad_Slot {
 			$page_types = array_map( 'sanitize_text_field', $_POST['hip_ad_page_types'] );
 			update_post_meta( $post_id, '_hip_ad_page_types', $page_types );
 		} else {
-			// If no checkboxes are checked, save empty array
-			update_post_meta( $post_id, '_hip_ad_page_types', array() );
+			// If no checkboxes are checked, default to 'all'
+			update_post_meta( $post_id, '_hip_ad_page_types', array( 'all' ) );
 		}
 		
 		// Clear REST API cache when slot is saved

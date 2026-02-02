@@ -36,7 +36,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 				<optgroup label="<?php esc_attr_e( 'Content', 'hip-admanager' ); ?>">
 					<option value="content-top" <?php selected( $gam_placement, 'content-top' ); ?>><?php esc_html_e( 'Content - Top', 'hip-admanager' ); ?></option>
 					<option value="content-after-hero" <?php selected( $gam_placement, 'content-after-hero' ); ?>><?php esc_html_e( 'Content - After Hero', 'hip-admanager' ); ?></option>
-					<option value="content-in-feed" <?php selected( $gam_placement, 'content-in-feed' ); ?>><?php esc_html_e( 'Content - In Feed (kartlar arası)', 'hip-admanager' ); ?></option>
+					<option value="content-in-feed" <?php selected( $gam_placement, 'content-in-feed' ); ?>><?php esc_html_e( 'Content - In Feed (between cards)', 'hip-admanager' ); ?></option>
 					<option value="content-after-section" <?php selected( $gam_placement, 'content-after-section' ); ?>><?php esc_html_e( 'Content - After Section', 'hip-admanager' ); ?></option>
 					<option value="content-middle" <?php selected( $gam_placement, 'content-middle' ); ?>><?php esc_html_e( 'Content - Middle', 'hip-admanager' ); ?></option>
 					<option value="content-bottom" <?php selected( $gam_placement, 'content-bottom' ); ?>><?php esc_html_e( 'Content - Bottom', 'hip-admanager' ); ?></option>
