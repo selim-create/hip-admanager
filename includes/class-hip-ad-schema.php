@@ -89,12 +89,12 @@ class HIP_Ad_Schema {
 				'end'   => '',
 			),
 			'refresh'             => array(
-				'enabled'          => false,
-				'trigger'          => 'time',
-				'interval'         => 30,
-				'max_refreshes'    => 0,
-				'require_visible'  => true,
-				'pause_when_hidden'=> true,
+				'enabled'           => false,
+				'trigger'           => 'time',
+				'interval'          => 30,
+				'max_refreshes'     => 0,
+				'require_visible'   => true,
+				'pause_when_hidden' => true,
 			),
 			'notes'               => '',
 			'legacy_slot_id'      => '',
@@ -103,18 +103,18 @@ class HIP_Ad_Schema {
 
 	public static function settings_defaults() {
 		return array(
-			'ads_enabled'              => 1,
-			'network_code'             => '',
-			'property_code'            => sanitize_title( wp_parse_url( home_url(), PHP_URL_HOST ) ),
-			'enable_single_request'    => 1,
-			'enable_lazy_load'         => 1,
-			'collapse_empty'           => 1,
-			'lazy_fetch_margin'        => 500,
-			'lazy_render_margin'       => 200,
-			'lazy_mobile_scaling'      => 2.0,
-			'global_targeting'         => array(),
-			'cache_duration'           => 300,
-			'debug_mode'               => 0,
+			'ads_enabled'           => 1,
+			'network_code'          => '',
+			'property_code'         => sanitize_title( wp_parse_url( home_url(), PHP_URL_HOST ) ),
+			'enable_single_request' => 1,
+			'enable_lazy_load'      => 1,
+			'collapse_empty'        => 1,
+			'lazy_fetch_margin'     => 500,
+			'lazy_render_margin'    => 200,
+			'lazy_mobile_scaling'   => 2.0,
+			'global_targeting'      => array(),
+			'cache_duration'        => 300,
+			'debug_mode'            => 0,
 		);
 	}
 
@@ -405,8 +405,22 @@ class HIP_Ad_Schema {
 		if ( '' === $value ) {
 			return '';
 		}
-		$timestamp = strtotime( $value );
-		return $timestamp ? gmdate( 'Y-m-d\TH:i:s\Z', $timestamp ) : '';
+
+		try {
+			if ( preg_match( '/(?:Z|[+\-]\d{2}:?\d{2})$/i', $value ) ) {
+				$date = new DateTimeImmutable( $value );
+			} else {
+				$timezone = function_exists( 'wp_timezone' ) ? wp_timezone() : new DateTimeZone( 'UTC' );
+				$format = preg_match( '/:\d{2}$/', $value ) ? 'Y-m-d\TH:i:s' : 'Y-m-d\TH:i';
+				$date = DateTimeImmutable::createFromFormat( '!' . $format, $value, $timezone );
+				if ( false === $date ) {
+					return '';
+				}
+			}
+			return $date->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d\TH:i:s\Z' );
+		} catch ( Exception $exception ) {
+			return '';
+		}
 	}
 
 	private static function enum( $value, $allowed, $default ) {
