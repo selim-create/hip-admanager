@@ -15,23 +15,7 @@ class HIP_Ad_Settings {
 	const ADS_TXT_OPTION = 'hip_ad_ads_txt_content';
 
 	public function __construct() {
-		add_action( 'admin_init', array( $this, 'register_settings' ) );
-	}
-
-	public function register_settings() {
-		register_setting(
-			'hip_ad_manager_settings_group',
-			self::OPTION_NAME,
-			array(
-				'type'              => 'array',
-				'sanitize_callback' => array( $this, 'sanitize_settings' ),
-				'default'           => HIP_Ad_Schema::settings_defaults(),
-			)
-		);
-	}
-
-	public function sanitize_settings( $input ) {
-		return HIP_Ad_Schema::normalize_settings( $input, self::get_all() );
+		// v2 intentionally owns all writes through this service and the custom admin controller.
 	}
 
 	public static function update( $input ) {
@@ -97,7 +81,6 @@ class HIP_Ad_Settings {
 				$clean[] = '# ' . trim( substr( $line, 1 ) );
 				continue;
 			}
-			// ads.txt rows are comma-delimited; keep publisher identifiers intact.
 			$parts = array_map( 'trim', explode( ',', $line ) );
 			$parts = array_map( 'sanitize_text_field', $parts );
 			$clean[] = implode( ', ', $parts );
@@ -109,22 +92,22 @@ class HIP_Ad_Settings {
 		$settings = self::get_all();
 		return array(
 			'schemaVersion' => HIP_Ad_Schema::VERSION,
-			'adsEnabled' => (bool) $settings['ads_enabled'],
-			'networkCode' => $settings['network_code'],
-			'propertyCode' => $settings['property_code'],
-			'siteName' => $settings['property_code'],
-			'gpt' => array(
+			'adsEnabled'    => (bool) $settings['ads_enabled'],
+			'networkCode'   => $settings['network_code'],
+			'propertyCode'  => $settings['property_code'],
+			'siteName'      => $settings['property_code'],
+			'gpt'           => array(
 				'singleRequest' => (bool) $settings['enable_single_request'],
 				'collapseEmpty' => (bool) $settings['collapse_empty'],
-				'lazyLoad' => $settings['enable_lazy_load'] ? array(
+				'lazyLoad'      => $settings['enable_lazy_load'] ? array(
 					'fetchMarginPercent'  => (int) $settings['lazy_fetch_margin'],
 					'renderMarginPercent' => (int) $settings['lazy_render_margin'],
 					'mobileScaling'       => (float) $settings['lazy_mobile_scaling'],
 				) : null,
 			),
 			'globalTargeting' => $settings['global_targeting'],
-			'cacheTtl' => (int) $settings['cache_duration'],
-			'debug' => (bool) $settings['debug_mode'],
+			'cacheTtl'        => (int) $settings['cache_duration'],
+			'debug'           => (bool) $settings['debug_mode'],
 		);
 	}
 }
