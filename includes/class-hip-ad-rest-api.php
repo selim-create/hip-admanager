@@ -38,6 +38,14 @@ class HIP_Ad_REST_API {
 			),
 		) );
 
+		register_rest_route( self::NAMESPACE, '/inventory', array(
+			'methods'             => WP_REST_Server::READABLE,
+			'callback'            => array( $this, 'get_inventory' ),
+			'permission_callback' => function() {
+				return current_user_can( 'manage_options' );
+			},
+		) );
+
 		register_rest_route( self::NAMESPACE, '/slots/(?P<id>\d+)', array(
 			'methods'             => WP_REST_Server::READABLE,
 			'callback'            => array( $this, 'get_slot' ),
@@ -69,7 +77,7 @@ class HIP_Ad_REST_API {
 	public function get_config() {
 		return $this->cached_response( 'config', function() {
 			$config = HIP_Ad_Settings::client_config();
-			$slots = array_map( array( 'HIP_Ad_Repository', 'api_slot' ), $this->live_slots() );
+			$slots = $config['adsEnabled'] ? array_map( array( 'HIP_Ad_Repository', 'api_slot' ), $this->live_slots() ) : array();
 			return array_merge( $config, array(
 				'network_code'        => $config['networkCode'],
 				'site_name'           => $config['propertyCode'],
@@ -103,13 +111,13 @@ class HIP_Ad_REST_API {
 		$cache_key = 'slots|' . wp_json_encode( $filters ) . '|' . $key;
 
 		return $this->cached_response( $cache_key, function() use ( $filters, $key ) {
-			$slots = $this->live_slots( array_filter( $filters ) );
+			$config = HIP_Ad_Settings::client_config();
+			$slots = $config['adsEnabled'] ? $this->live_slots( array_filter( $filters ) ) : array();
 			if ( $key ) {
 				$slots = array_values( array_filter( $slots, function( $slot ) use ( $key ) {
 					return $slot['key'] === $key;
 				} ) );
 			}
-			$config = HIP_Ad_Settings::client_config();
 			return array(
 				'schemaVersion'       => HIP_Ad_Schema::VERSION,
 				'networkCode'         => $config['networkCode'],
@@ -126,9 +134,25 @@ class HIP_Ad_REST_API {
 		} );
 	}
 
+	public function get_inventory() {
+		$slots = array_map( function( $slot ) {
+			$data = HIP_Ad_Repository::api_slot( $slot );
+			$data['status'] = $slot['status'];
+			$data['isLive'] = HIP_Ad_Repository::is_live( $slot );
+			return $data;
+		}, HIP_Ad_Repository::all() );
+		return $this->response( array(
+			'schemaVersion' => HIP_Ad_Schema::VERSION,
+			'slots'         => $slots,
+		), 0 );
+	}
+
 	public function get_slot( $request ) {
+		if ( ! HIP_Ad_Settings::get( 'ads_enabled', 1 ) ) {
+			return new WP_Error( 'hip_ads_disabled', __( 'Advertisements are disabled.', 'hip-admanager' ), array( 'status' => 404 ) );
+		}
 		$slot = HIP_Ad_Repository::get( absint( $request['id'] ) );
-		if ( ! $slot || ! in_array( $slot['status'], array( 'active', 'scheduled' ), true ) || ! HIP_Ad_Repository::is_live( $slot ) ) {
+		if ( ! $slot || ! HIP_Ad_Repository::is_live( $slot ) ) {
 			return new WP_Error( 'hip_ad_slot_not_found', __( 'Ad slot not found.', 'hip-admanager' ), array( 'status' => 404 ) );
 		}
 		return $this->response( HIP_Ad_Repository::api_slot( $slot ) );
@@ -138,12 +162,14 @@ class HIP_Ad_REST_API {
 		$settings = HIP_Ad_Settings::get_all();
 		$stats = HIP_Ad_Repository::stats();
 		$issues = HIP_Ad_Repository::diagnostics();
-		$errors = count( array_filter( $issues, function( $issue ) { return 'error' === $issue['level']; } ) );
+		$errors = count( array_filter( $issues, function( $issue ) {
+			return 'error' === $issue['level'];
+		} ) );
 		return $this->response( array(
 			'ok'            => 0 === $errors && ( ! $settings['ads_enabled'] || ! empty( $settings['network_code'] ) ),
 			'schemaVersion' => HIP_Ad_Schema::VERSION,
 			'adsEnabled'    => (bool) $settings['ads_enabled'],
-			'activeSlots'   => count( $this->live_slots() ),
+			'activeSlots'   => $settings['ads_enabled'] ? count( $this->live_slots() ) : 0,
 			'errors'        => $errors,
 			'cacheVersion'  => HIP_Ad_Repository::cache_version(),
 			'totalSlots'    => (int) $stats['total'],
@@ -174,10 +200,7 @@ class HIP_Ad_REST_API {
 	private function live_slots( $filters = array() ) {
 		$filters = is_array( $filters ) ? $filters : array();
 		unset( $filters['status'] );
-		$slots = HIP_Ad_Repository::all( $filters );
-		return array_values( array_filter( $slots, function( $slot ) {
-			return in_array( $slot['status'], array( 'active', 'scheduled' ), true ) && HIP_Ad_Repository::is_live( $slot );
-		} ) );
+		return array_values( array_filter( HIP_Ad_Repository::all( $filters ), array( 'HIP_Ad_Repository', 'is_live' ) ) );
 	}
 
 	private function cached_response( $suffix, $callback ) {
