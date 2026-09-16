@@ -69,7 +69,7 @@ class HIP_Ad_REST_API {
 	public function get_config() {
 		return $this->cached_response( 'config', function() {
 			$config = HIP_Ad_Settings::client_config();
-			$slots = array_map( array( 'HIP_Ad_Repository', 'api_slot' ), HIP_Ad_Repository::active() );
+			$slots = array_map( array( 'HIP_Ad_Repository', 'api_slot' ), $this->live_slots() );
 			return array_merge( $config, array(
 				'network_code'        => $config['networkCode'],
 				'site_name'           => $config['propertyCode'],
@@ -103,7 +103,7 @@ class HIP_Ad_REST_API {
 		$cache_key = 'slots|' . wp_json_encode( $filters ) . '|' . $key;
 
 		return $this->cached_response( $cache_key, function() use ( $filters, $key ) {
-			$slots = HIP_Ad_Repository::active( array_filter( $filters ) );
+			$slots = $this->live_slots( array_filter( $filters ) );
 			if ( $key ) {
 				$slots = array_values( array_filter( $slots, function( $slot ) use ( $key ) {
 					return $slot['key'] === $key;
@@ -128,7 +128,7 @@ class HIP_Ad_REST_API {
 
 	public function get_slot( $request ) {
 		$slot = HIP_Ad_Repository::get( absint( $request['id'] ) );
-		if ( ! $slot || ! HIP_Ad_Repository::is_live( $slot ) ) {
+		if ( ! $slot || ! in_array( $slot['status'], array( 'active', 'scheduled' ), true ) || ! HIP_Ad_Repository::is_live( $slot ) ) {
 			return new WP_Error( 'hip_ad_slot_not_found', __( 'Ad slot not found.', 'hip-admanager' ), array( 'status' => 404 ) );
 		}
 		return $this->response( HIP_Ad_Repository::api_slot( $slot ) );
@@ -143,9 +143,10 @@ class HIP_Ad_REST_API {
 			'ok'            => 0 === $errors && ( ! $settings['ads_enabled'] || ! empty( $settings['network_code'] ) ),
 			'schemaVersion' => HIP_Ad_Schema::VERSION,
 			'adsEnabled'    => (bool) $settings['ads_enabled'],
-			'activeSlots'   => (int) $stats['active'],
+			'activeSlots'   => count( $this->live_slots() ),
 			'errors'        => $errors,
 			'cacheVersion'  => HIP_Ad_Repository::cache_version(),
+			'totalSlots'    => (int) $stats['total'],
 		) );
 	}
 
@@ -166,9 +167,17 @@ class HIP_Ad_REST_API {
 		) );
 	}
 
-	/** Backwards-compatible method used by older code. */
 	public function clear_slots_cache() {
 		return HIP_Ad_Repository::bump_cache_version();
+	}
+
+	private function live_slots( $filters = array() ) {
+		$filters = is_array( $filters ) ? $filters : array();
+		unset( $filters['status'] );
+		$slots = HIP_Ad_Repository::all( $filters );
+		return array_values( array_filter( $slots, function( $slot ) {
+			return in_array( $slot['status'], array( 'active', 'scheduled' ), true ) && HIP_Ad_Repository::is_live( $slot );
+		} ) );
 	}
 
 	private function cached_response( $suffix, $callback ) {
@@ -194,8 +203,8 @@ class HIP_Ad_REST_API {
 			$ttl = (int) HIP_Ad_Settings::get( 'cache_duration', 300 );
 		}
 		$headers = array(
-			'Cache-Control' => $ttl > 0 ? 'public, max-age=' . $ttl . ', stale-while-revalidate=' . max( 60, $ttl ) : 'no-cache, no-store, must-revalidate',
-			'ETag'          => '"' . md5( wp_json_encode( $data ) ) . '"',
+			'Cache-Control'    => $ttl > 0 ? 'public, max-age=' . $ttl . ', stale-while-revalidate=' . max( 60, $ttl ) : 'no-cache, no-store, must-revalidate',
+			'ETag'             => '"' . md5( wp_json_encode( $data ) ) . '"',
 			'X-HIP-Ads-Schema' => (string) HIP_Ad_Schema::VERSION,
 		);
 		if ( $cache_status ) {
