@@ -36,6 +36,13 @@ function hip_ad_manager_activate() {
 	require_once HIP_AD_MANAGER_PLUGIN_DIR . 'includes/class-hip-ad-repository.php';
 	require_once HIP_AD_MANAGER_PLUGIN_DIR . 'includes/class-hip-ad-settings.php';
 	require_once HIP_AD_MANAGER_PLUGIN_DIR . 'includes/class-hip-ad-migrator.php';
+
+	if ( false === get_option( HIP_Ad_Settings::OPTION_NAME, false ) ) {
+		$defaults = HIP_Ad_Schema::settings_defaults();
+		$defaults['ads_enabled'] = 0;
+		update_option( HIP_Ad_Settings::OPTION_NAME, $defaults, false );
+	}
+
 	HIP_Ad_Migrator::activate();
 }
 register_activation_hook( __FILE__, 'hip_ad_manager_activate' );
