@@ -37,8 +37,20 @@
     const key=$('#hip-slot-key',form);
     const placement=$('#hip-placement-key',form);
     const path=$('#hip-ad-unit-path',form);
+    const slotId=$('[name="slot_id"]',form);
+    const isNew=!Number(slotId?.value||0);
     let keyTouched=Boolean(key&&key.value);
     let placementTouched=Boolean(placement&&placement.value);
+
+    const minHeightFields={
+      desktop:$('[name="min_height_desktop"]',form),
+      tablet:$('[name="min_height_tablet"]',form),
+      mobile:$('[name="min_height_mobile"]',form)
+    };
+    const minHeightTouched={desktop:false,tablet:false,mobile:false};
+    Object.entries(minHeightFields).forEach(([device,field])=>{
+      field?.addEventListener('input',()=>{minHeightTouched[device]=true;});
+    });
 
     if(key)key.addEventListener('input',()=>{keyTouched=true;});
     if(placement)placement.addEventListener('input',()=>{placementTouched=true;});
@@ -48,9 +60,15 @@
       updatePreview();
     });
     [key,placement,path].filter(Boolean).forEach(field=>field.addEventListener('input',updatePreview));
-    document.addEventListener('change',updatePreview);
+    document.addEventListener('change',event=>{
+      updatePreview();
+      if(isNew&&event.target.closest('#hip-size-rows,#hip-mapping-rows'))suggestMinHeights();
+    });
     document.addEventListener('input',event=>{
-      if(event.target.matches('[name="size_width[]"],[name="size_height[]"]'))updatePreview();
+      if(event.target.matches('[name="size_width[]"],[name="size_height[]"],[name="mapping_viewport[]"],[name="mapping_sizes[]"]')){
+        updatePreview();
+        if(isNew)suggestMinHeights();
+      }
     });
 
     function updatePreview(){
@@ -65,6 +83,58 @@
       $('[data-preview-placement]',preview).textContent=(placement&&placement.value)||'—';
       $('[data-preview-path]',preview).textContent=(path&&path.value)||'—';
       $('[data-preview-sizes]',preview).textContent=sizes.length?sizes.join(' · '):'Boyut eklenmedi';
+    }
+
+    function parseSizeText(value){
+      const sizes=[];
+      const regex=/(\d{1,4})\s*[xX×]\s*(\d{1,4})/g;
+      let match;
+      while((match=regex.exec(String(value||'')))!==null){
+        sizes.push([Number(match[1]),Number(match[2])]);
+      }
+      return sizes;
+    }
+
+    function baseSizes(){
+      return $$('[data-size-row]',form).map(row=>[
+        Number($('[name="size_width[]"]',row)?.value||0),
+        Number($('[name="size_height[]"]',row)?.value||0)
+      ]).filter(size=>size[0]>0&&size[1]>0);
+    }
+
+    function mappings(){
+      return $$('#hip-mapping-rows [data-repeat-row]',form).map(row=>({
+        viewport:Number($('[name="mapping_viewport[]"]',row)?.value||0),
+        sizes:parseSizeText($('[name="mapping_sizes[]"]',row)?.value||'')
+      })).sort((a,b)=>b.viewport-a.viewport);
+    }
+
+    function maxHeight(sizes){
+      return sizes.reduce((max,size)=>Math.max(max,Number(size[1]||0)),0);
+    }
+
+    function heightForViewport(width){
+      const map=mappings();
+      if(map.length){
+        const match=map.find(item=>width>=item.viewport);
+        if(match)return maxHeight(match.sizes);
+        return 0;
+      }
+      return maxHeight(baseSizes());
+    }
+
+    function suggestMinHeights(){
+      if(!isNew)return;
+      const suggestions={
+        desktop:heightForViewport(1440),
+        tablet:heightForViewport(768),
+        mobile:heightForViewport(375)
+      };
+      Object.entries(suggestions).forEach(([device,value])=>{
+        const field=minHeightFields[device];
+        if(!field||minHeightTouched[device])return;
+        field.value=String(value||0);
+      });
     }
 
     function refreshVisibility(){
@@ -103,6 +173,7 @@
     window.addEventListener('beforeunload',event=>{
       if(dirty&&form.dataset.submitting!=='1'){event.preventDefault();event.returnValue='';}
     });
+    suggestMinHeights();
     updatePreview();
   }
 
