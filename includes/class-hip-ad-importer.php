@@ -19,6 +19,7 @@ class HIP_Ad_Importer {
 		if ( ! is_readable( $file_path ) ) {
 			return new WP_Error( 'file_not_readable', __( 'The CSV file could not be read.', 'hip-admanager' ) );
 		}
+
 		$handle = fopen( $file_path, 'r' );
 		if ( false === $handle ) {
 			return new WP_Error( 'file_open_failed', __( 'The CSV file could not be opened.', 'hip-admanager' ) );
@@ -27,24 +28,44 @@ class HIP_Ad_Importer {
 		$headers = array();
 		$rows = array();
 		$line = 0;
+
 		while ( ( $data = fgetcsv( $handle, 100000, ',' ) ) !== false ) {
 			$line++;
-			if ( 1 === $line && isset( $data[0] ) ) {
+
+			if ( isset( $data[0] ) ) {
 				$data[0] = preg_replace( '/^\xEF\xBB\xBF/', '', $data[0] );
 			}
-			if ( empty( array_filter( $data, 'strlen' ) ) ) {
+
+			$non_empty = array_filter(
+				$data,
+				function( $value ) {
+					return '' !== trim( (string) $value );
+				}
+			);
+			if ( empty( $non_empty ) ) {
 				continue;
 			}
+
 			if ( empty( $headers ) ) {
-				$headers = array_map( array( $this, 'normalize_header' ), $data );
+				$candidate = array_map( array( $this, 'normalize_header' ), $data );
+				if ( ! $this->is_header_row( $candidate ) ) {
+					continue;
+				}
+				$headers = $candidate;
 				continue;
 			}
+
+			if ( 1 === count( $data ) && isset( $data[0] ) && '#' === substr( ltrim( (string) $data[0] ), 0, 1 ) ) {
+				continue;
+			}
+
 			if ( count( $data ) < count( $headers ) ) {
 				$data = array_pad( $data, count( $headers ), '' );
 			}
 			if ( count( $data ) > count( $headers ) ) {
 				$data = array_slice( $data, 0, count( $headers ) );
 			}
+
 			$row = array_combine( $headers, $data );
 			if ( $row ) {
 				$row['_line'] = $line;
@@ -54,11 +75,12 @@ class HIP_Ad_Importer {
 		fclose( $handle );
 
 		if ( empty( $headers ) ) {
-			return new WP_Error( 'missing_header', __( 'No CSV header row was found.', 'hip-admanager' ) );
+			return new WP_Error( 'missing_header', __( 'No valid Google Ad Manager CSV header row was found.', 'hip-admanager' ) );
 		}
 		if ( empty( $rows ) ) {
 			return new WP_Error( 'empty_csv', __( 'The CSV contains no ad-unit rows.', 'hip-admanager' ) );
 		}
+
 		return $rows;
 	}
 
@@ -135,6 +157,7 @@ class HIP_Ad_Importer {
 			$result['counts'][ $item['action'] ]++;
 			$result['items'][] = $item;
 		}
+
 		return $result;
 	}
 
@@ -145,6 +168,7 @@ class HIP_Ad_Importer {
 			'skipped' => array(),
 			'failed'  => array(),
 		);
+
 		foreach ( isset( $preview['items'] ) ? $preview['items'] : array() as $item ) {
 			if ( 'invalid' === $item['action'] ) {
 				$result['skipped'][] = array( 'line' => $item['line'], 'reason' => implode( ' ', $item['errors'] ) );
@@ -154,15 +178,18 @@ class HIP_Ad_Importer {
 				$result['skipped'][] = array( 'line' => $item['line'], 'reason' => __( 'Existing slot left unchanged.', 'hip-admanager' ) );
 				continue;
 			}
+
 			$post_id = 'update' === $item['action'] ? absint( $item['existing_id'] ) : 0;
 			$saved = HIP_Ad_Repository::save( $item['slot'], $post_id );
 			if ( is_wp_error( $saved ) ) {
 				$result['failed'][] = array( 'line' => $item['line'], 'reason' => $saved->get_error_message() );
 				continue;
 			}
+
 			$bucket = $post_id ? 'updated' : 'created';
 			$result[ $bucket ][] = array( 'id' => $saved['id'], 'name' => $saved['name'], 'key' => $saved['key'] );
 		}
+
 		HIP_Ad_Repository::bump_cache_version();
 		return $result;
 	}
@@ -181,15 +208,27 @@ class HIP_Ad_Importer {
 		if ( ! $code ) {
 			$errors[] = __( 'Missing GAM ad-unit code.', 'hip-admanager' );
 		}
-		$sizes = $this->parse_sizes( $sizes_raw );
-		if ( empty( $sizes ) ) {
-			$errors[] = __( 'No valid sizes were found.', 'hip-admanager' );
+
+		$descriptor = strtolower( $name . ' ' . $code . ' ' . $sizes_raw );
+		$is_out_of_page = false !== strpos( $descriptor, 'out-of-page' );
+		$is_video = false !== strpos( $descriptor, 'video' ) || preg_match( '/\d{1,4}\s*[xX]\s*\d{1,4}\s*v(?:\b|;|$)/i', $sizes_raw );
+
+		if ( $is_out_of_page ) {
+			$errors[] = __( 'Out-of-page inventory is not supported by the current display-slot runtime and was skipped.', 'hip-admanager' );
+		} elseif ( $is_video ) {
+			$errors[] = __( 'Video inventory is not supported by the current display-slot runtime and was skipped.', 'hip-admanager' );
+		}
+
+		$sizes = ( $is_out_of_page || $is_video ) ? array() : $this->parse_sizes( $sizes_raw );
+		if ( ! $is_out_of_page && ! $is_video && empty( $sizes ) ) {
+			$errors[] = __( 'No valid display sizes were found.', 'hip-admanager' );
 		}
 
 		$path = $this->ad_unit_path( $code, $network_code );
 		if ( ! $path ) {
 			$errors[] = __( 'A network code is required to build the ad-unit path.', 'hip-admanager' );
 		}
+
 		$label = $name ?: basename( str_replace( '\\', '/', $code ) );
 		$group = $this->infer_group( $label . ' ' . $code );
 		$device = $this->infer_device( $label . ' ' . $code );
@@ -200,26 +239,28 @@ class HIP_Ad_Importer {
 			$warnings[] = __( 'GAM inventory ID is empty; this is allowed but importing it is recommended.', 'hip-admanager' );
 		}
 
-		$slot = HIP_Ad_Schema::normalize_slot( array(
-			'name'            => $label,
-			'key'             => $key,
-			'inventory_id'    => $inventory_id,
-			'ad_unit_path'    => $path,
-			'placement_group' => $group,
-			'placement_key'   => $key,
-			'device'          => $device,
-			'sizes'           => $sizes,
-			'size_mappings'   => $mapping,
-			'status'          => 'active',
-			'priority'        => 10,
-			'lazy_load'       => true,
-			'collapse_empty'  => true,
-			'min_height'      => array(
-				'desktop' => HIP_Ad_Schema::compute_min_height( $sizes ),
-				'tablet'  => HIP_Ad_Schema::compute_min_height( $sizes ),
-				'mobile'  => min( 280, HIP_Ad_Schema::compute_min_height( $sizes ) ),
-			),
-		) );
+		$slot = HIP_Ad_Schema::normalize_slot(
+			array(
+				'name'            => $label,
+				'key'             => $key,
+				'inventory_id'    => $inventory_id,
+				'ad_unit_path'    => $path,
+				'placement_group' => $group,
+				'placement_key'   => $key,
+				'device'          => $device,
+				'sizes'           => $sizes,
+				'size_mappings'   => $mapping,
+				'status'          => 'paused',
+				'priority'        => 10,
+				'lazy_load'       => true,
+				'collapse_empty'  => true,
+				'min_height'      => array(
+					'desktop' => HIP_Ad_Schema::compute_min_height( $sizes ),
+					'tablet'  => HIP_Ad_Schema::compute_min_height( $sizes ),
+					'mobile'  => min( 280, HIP_Ad_Schema::compute_min_height( $sizes ) ),
+				),
+			)
+		);
 
 		return array( 'slot' => $slot, 'errors' => $errors, 'warnings' => $warnings );
 	}
@@ -257,6 +298,14 @@ class HIP_Ad_Importer {
 		return trim( $header, '_' );
 	}
 
+	private function is_header_row( $headers ) {
+		$headers = array_values( array_filter( (array) $headers, 'strlen' ) );
+		$has_code = in_array( 'code', $headers, true ) || in_array( 'ad_unit_code', $headers, true ) || in_array( 'adunit_code', $headers, true );
+		$has_name = in_array( 'name', $headers, true ) || in_array( 'ad_unit_name', $headers, true ) || in_array( 'adunit_name', $headers, true );
+		$has_sizes = in_array( 'sizes', $headers, true ) || in_array( 'size', $headers, true );
+		return $has_code && $has_name && $has_sizes;
+	}
+
 	private function pick( $row, $keys ) {
 		foreach ( $keys as $key ) {
 			if ( isset( $row[ $key ] ) && '' !== trim( (string) $row[ $key ] ) ) {
@@ -267,7 +316,7 @@ class HIP_Ad_Importer {
 	}
 
 	private function parse_sizes( $value ) {
-		preg_match_all( '/(\d{1,4})\s*[xX]\s*(\d{1,4})/', (string) $value, $matches, PREG_SET_ORDER );
+		preg_match_all( '/(\d{1,4})\s*[xX]\s*(\d{1,4})(?!\s*v)/i', (string) $value, $matches, PREG_SET_ORDER );
 		$sizes = array();
 		foreach ( $matches as $match ) {
 			$sizes[] = array( (int) $match[1], (int) $match[2] );
@@ -291,6 +340,9 @@ class HIP_Ad_Importer {
 
 	private function infer_group( $text ) {
 		$text = strtolower( remove_accents( (string) $text ) );
+		if ( preg_match( '/in[-_ ]?banner/', $text ) ) {
+			return 'content';
+		}
 		if ( preg_match( '/masthead|leaderboard|billboard|header|970x|728x90/', $text ) ) {
 			return 'header';
 		}
@@ -352,6 +404,7 @@ class HIP_Ad_Importer {
 		foreach ( HIP_Ad_Schema::normalize_sizes( $declared_sizes ) as $size ) {
 			$allowed[ $size[0] . 'x' . $size[1] ] = true;
 		}
+
 		$result = array();
 		foreach ( (array) $mappings as $mapping ) {
 			$mapped = isset( $mapping['sizes'] ) ? HIP_Ad_Schema::normalize_sizes( $mapping['sizes'] ) : array();
@@ -359,16 +412,22 @@ class HIP_Ad_Importer {
 				$result[] = array( 'viewport' => $mapping['viewport'], 'sizes' => array() );
 				continue;
 			}
-			$mapped = array_values( array_filter( $mapped, function( $size ) use ( $allowed ) {
-				return isset( $allowed[ $size[0] . 'x' . $size[1] ] );
-			} ) );
+			$mapped = array_values(
+				array_filter(
+					$mapped,
+					function( $size ) use ( $allowed ) {
+						return isset( $allowed[ $size[0] . 'x' . $size[1] ] );
+					}
+				)
+			);
 			if ( ! empty( $mapped ) ) {
 				$result[] = array( 'viewport' => $mapping['viewport'], 'sizes' => $mapped );
 			}
-		}
+
 		if ( empty( $result ) && ! empty( $declared_sizes ) ) {
 			$result[] = array( 'viewport' => array( 0, 0 ), 'sizes' => HIP_Ad_Schema::normalize_sizes( $declared_sizes ) );
 		}
+
 		return $result;
 	}
 }
