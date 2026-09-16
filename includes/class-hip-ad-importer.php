@@ -68,6 +68,13 @@ class HIP_Ad_Importer {
 			'items'  => array(),
 			'counts' => array( 'create' => 0, 'update' => 0, 'invalid' => 0 ),
 		);
+		$seen_paths = array();
+		$seen_existing = array();
+		$reserved_keys = array();
+
+		foreach ( HIP_Ad_Repository::all() as $existing_slot ) {
+			$reserved_keys[ $existing_slot['key'] ] = true;
+		}
 
 		foreach ( (array) $rows as $row ) {
 			$parsed = $this->row_to_slot( $row, $network_code );
@@ -81,18 +88,48 @@ class HIP_Ad_Importer {
 			);
 
 			if ( empty( $item['errors'] ) && ! empty( $item['slot'] ) ) {
+				$path = $item['slot']['ad_unit_path'];
+				if ( isset( $seen_paths[ $path ] ) ) {
+					$item['errors'][] = sprintf(
+						/* translators: %d: CSV line number */
+						__( 'Duplicate GAM ad-unit path in this CSV; first seen on line %d.', 'hip-admanager' ),
+						$seen_paths[ $path ]
+					);
+				} else {
+					$seen_paths[ $path ] = $item['line'];
+				}
+			}
+
+			if ( empty( $item['errors'] ) && ! empty( $item['slot'] ) ) {
 				$existing = HIP_Ad_Repository::find_by_ad_unit_path( $item['slot']['ad_unit_path'] );
 				if ( ! $existing ) {
 					$existing = HIP_Ad_Repository::find_by_key( $item['slot']['key'] );
 				}
+
 				if ( $existing ) {
-					$item['action'] = 'update';
-					$item['existing_id'] = (int) $existing['id'];
-					$item['slot'] = $this->merge_import( $existing, $item['slot'] );
+					if ( isset( $seen_existing[ $existing['id'] ] ) ) {
+						$item['errors'][] = sprintf(
+							/* translators: %d: CSV line number */
+							__( 'Multiple CSV rows resolve to the same existing slot; first seen on line %d.', 'hip-admanager' ),
+							$seen_existing[ $existing['id'] ]
+						);
+					} else {
+						$seen_existing[ $existing['id'] ] = $item['line'];
+						$item['action'] = 'update';
+						$item['existing_id'] = (int) $existing['id'];
+						$item['slot'] = $this->merge_import( $existing, $item['slot'] );
+						$reserved_keys[ $item['slot']['key'] ] = true;
+					}
 				} else {
+					$item['slot']['key'] = $this->unique_preview_key( $item['slot']['key'], $reserved_keys );
+					$item['slot']['placement_key'] = $item['slot']['key'];
+					$reserved_keys[ $item['slot']['key'] ] = true;
 					$item['action'] = 'create';
-					$item['slot']['key'] = HIP_Ad_Repository::unique_key( $item['slot']['key'] );
 				}
+			}
+
+			if ( ! empty( $item['errors'] ) ) {
+				$item['action'] = 'invalid';
 			}
 
 			$result['counts'][ $item['action'] ]++;
@@ -196,6 +233,20 @@ class HIP_Ad_Importer {
 			$existing['size_mappings'] = $incoming['size_mappings'];
 		}
 		return HIP_Ad_Schema::normalize_slot( $existing );
+	}
+
+	private function unique_preview_key( $candidate, $reserved ) {
+		$base = HIP_Ad_Schema::sanitize_key( $candidate );
+		if ( ! $base ) {
+			$base = 'ad_slot';
+		}
+		$key = $base;
+		$counter = 2;
+		while ( isset( $reserved[ $key ] ) ) {
+			$key = $base . '_' . $counter;
+			$counter++;
+		}
+		return $key;
 	}
 
 	private function normalize_header( $header ) {
