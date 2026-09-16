@@ -1,241 +1,145 @@
-# Hierarchical Placement System - Documentation
+# HIP Ad Manager v2 — Placement Model
 
-This document explains the new hierarchical placement system implemented in HIP Ad Manager.
+HIP Ads v2 separates three concepts that were mixed together in v1:
 
-## Overview
+1. **Stable slot key** — the permanent frontend identifier, for example `article_inline_1`.
+2. **Placement key** — the logical place in the product where inventory is mounted. It may equal the slot key, but does not have to.
+3. **Placement group** — a broad operational group used for filtering and API queries.
 
-The hierarchical placement system replaces the simple placement system (header, sidebar, in-content, footer) with a more flexible and granular structure that allows better control over ad placement and organization.
+Google Ad Manager numeric inventory IDs and ad-unit paths are not frontend placement identifiers.
 
-## New Placement Types
+## Placement groups
 
-### Header Placements
-- `header-leaderboard` - 728x90 (desktop) / 320x100 (mobile)
-- `header-masthead` - 970x250 (large banner)
-- `header-mobile` - 320x100 (mobile only)
+The canonical groups are:
 
-### Sidebar Placements
-- `sidebar-top` - 300x250 (top - MediumRectangle)
-- `sidebar-middle` - 300x600 (middle - HalfPage)
-- `sidebar-bottom` - 300x250 (bottom)
-- `sidebar-sticky` - 160x600 (sticky/skyscraper)
+- `header`
+- `content`
+- `sidebar`
+- `footer`
+- `overlay`
+- `other`
 
-### Content Placements
-- `content-top` - Top of article/content
-- `content-after-hero` - Below hero/search area (homepage)
-- `content-in-feed` - Between list/card items
-- `content-after-section` - Below sections
-- `content-middle` - Middle of article
-- `content-bottom` - End of article
+Placement keys are intentionally free-form stable keys. Recommended examples:
 
-### Footer Placements
-- `footer-banner` - 728x90 (desktop)
-- `footer-sticky-mobile` - 320x50 (mobile sticky)
+### Header
+- `home_top_leaderboard`
+- `archive_top_leaderboard`
+- `article_top_billboard`
 
-### Special Placements
-- `interstitial` - Full-page interstitial
-- `native` - Native ad format
+### Content
+- `home_mid_1`
+- `article_inline_1`
+- `article_inline_2`
+- `archive_in_feed_1`
+- `article_end`
 
-### Legacy Placements (Backward Compatibility)
-- `header` - Generic header placement
-- `sidebar` - Generic sidebar placement
-- `in-content` - Generic in-content placement
-- `footer` - Generic footer placement
-- `mobile-sticky` - Generic mobile sticky placement
+### Sidebar
+- `article_sidebar_top`
+- `article_sidebar_sticky`
+- `archive_sidebar_top`
 
-## New Meta Fields
+### Footer
+- `site_footer_banner`
 
-### Zone (Optional)
-The zone field provides additional control over ad placement:
-- `top` - Top area
-- `middle` - Middle area
-- `bottom` - Bottom area
-- `sticky` - Sticky/fixed position
+### Overlay
+- `mobile_anchor`
+- `interstitial`
 
-### Position Order
-A number field (1-100) that controls the display order of ads within the same placement/zone. Lower numbers appear first.
+## Why keys are not hard-coded by the plugin
 
-### Page Types
-Checkboxes to specify which page types should display the ad:
-- `home` - Homepage
-- `post` - Single Post
-- `page` - Single Page
-- `category` - Category Archive
-- `tag` - Tag Archive
-- `search` - Search Results
-- `archive` - Other Archives
-- `all` - All Pages (default)
+The plugin should not decide the product's visual layout. The headless frontend owns physical placement. WordPress/GAM control which inventory is assigned to that placement.
 
-## API Response Format
+For example, the frontend can render:
 
-### Slot Data Example
-```json
-{
-  "id": 123,
-  "name": "Sidebar Top Ad",
-  "slotId": "23335123656",
-  "adUnitPath": "/273585429/site.com/sidebar-top",
-  "placement": "sidebar-top",
-  "zone": "top",
-  "position": 1,
-  "page_types": ["home", "post"],
-  "device": "all",
-  "sizes": [
-    {"width": 300, "height": 250}
-  ],
-  "priority": 10,
-  "lazyLoad": true
-}
+```tsx
+<AdSlot placement="article_inline_1" />
 ```
 
-### Config Endpoint - Placement Groups
-The config endpoint (`/wp-json/hip-ads/v1/config`) now includes placement groups:
+The REST request can then resolve live inventory for that placement:
 
-```json
-{
-  "placement_groups": {
-    "header": [
-      "header-leaderboard",
-      "header-masthead", 
-      "header-mobile"
-    ],
-    "sidebar": [
-      "sidebar-top",
-      "sidebar-middle",
-      "sidebar-bottom",
-      "sidebar-sticky"
-    ],
-    "content": [
-      "content-top",
-      "content-after-hero",
-      "content-in-feed",
-      "content-after-section",
-      "content-middle",
-      "content-bottom"
-    ],
-    "footer": [
-      "footer-banner",
-      "footer-sticky-mobile"
-    ]
-  }
-}
+```text
+GET /wp-json/hip-ads/v1/slots?placement=article_inline_1&page_type=article
 ```
 
-## Usage Examples
+This allows AdOps to change the GAM ad-unit path, sizes, targeting, schedule, status or device rules without a frontend deployment.
 
-### 1. Creating an Ad Slot with New Placement
+## Stable slot key vs placement key
 
-In WordPress Admin:
-1. Go to **HIP Ad Manager** → **Ad Slots** → **Add New**
-2. Fill in the basic information
-3. Select **Placement**: Choose from the hierarchical options (e.g., "Sidebar - Top (300x250)")
-4. Optionally set **Zone**: Select "top" for top priority
-5. Set **Position Order**: Enter a number (e.g., 1 for first position)
-6. Select **Page Types**: Check which page types should show this ad
-7. Save the ad slot
+For simple properties, use the same value for both:
 
-### 2. Filtering Slots by Placement (API)
-
-```bash
-# Get all sidebar ads
-curl https://your-site.com/wp-json/hip-ads/v1/slots?placement=sidebar-top
-
-# Get all header ads  
-curl https://your-site.com/wp-json/hip-ads/v1/slots?placement=header-leaderboard
+```text
+key: article_inline_1
+placement_key: article_inline_1
 ```
 
-### 3. Frontend Implementation
+For advanced setups, multiple inventory variants can share a placement concept while keeping independent stable keys. Example:
 
-```javascript
-// Fetch slots for a specific placement
-async function loadAds() {
-  const response = await fetch('/wp-json/hip-ads/v1/config');
-  const config = await response.json();
-  
-  // Get all sidebar placements
-  const sidebarPlacements = config.placement_groups.sidebar;
-  
-  // Filter slots by sidebar placements
-  const sidebarAds = config.slots.filter(slot => 
-    sidebarPlacements.includes(slot.placement)
-  );
-  
-  // Sort by position
-  sidebarAds.sort((a, b) => a.position - b.position);
-  
-  // Filter by page type (example: 'post')
-  const currentPageType = 'post';
-  const relevantAds = sidebarAds.filter(slot =>
-    slot.page_types.includes(currentPageType) || 
-    slot.page_types.includes('all')
-  );
-  
-  // Render ads
-  relevantAds.forEach(ad => {
-    renderAd(ad);
-  });
-}
+```text
+key: article_inline_1_desktop
+placement_key: article_inline_1
+
+device: desktop
 ```
 
-### 4. Grouping by Placement Prefix
+```text
+key: article_inline_1_mobile
+placement_key: article_inline_1
 
-```javascript
-// Group slots by their placement prefix
-function groupSlotsByCategory(slots) {
-  return slots.reduce((groups, slot) => {
-    const prefix = slot.placement.split('-')[0]; // 'header', 'sidebar', etc.
-    if (!groups[prefix]) {
-      groups[prefix] = [];
-    }
-    groups[prefix].push(slot);
-    return groups;
-  }, {});
-}
-
-// Usage
-const grouped = groupSlotsByCategory(config.slots);
-console.log(grouped.header);  // All header-* ads
-console.log(grouped.sidebar); // All sidebar-* ads
+device: mobile
 ```
 
-## Migration Guide
+The frontend requests the placement and device context; HIP Ads returns the matching live slot set.
 
-### For Existing Installations
+## Page types
 
-1. **Existing ads continue to work**: All existing ad slots with legacy placements (`header`, `sidebar`, etc.) will continue to function without changes.
+Canonical page-type filters are:
 
-2. **Gradual migration**: You can gradually migrate to the new hierarchical placements:
-   - Edit existing ad slots
-   - Change placement from "Header (Legacy)" to "Header - Leaderboard"
-   - Optionally set zone and position for better control
-   - Set page types if needed
+- `all`
+- `home`
+- `article`
+- `category`
+- `search`
+- `page`
 
-3. **API compatibility**: The API returns both old and new placement formats, so frontend code will continue to work.
+If `all` is selected, the slot is eligible for every page type.
 
-### For New Installations
+## Category rules
 
-Start using the new hierarchical placements from the beginning for better organization and control.
+Category values are WordPress/category slugs. An empty category list means there is no category restriction.
 
-## Best Practices
+Examples:
 
-1. **Use specific placements**: Instead of generic "sidebar", use "sidebar-top" or "sidebar-middle" for better clarity
-2. **Set position order**: When multiple ads share the same placement, use position to control display order
-3. **Leverage page types**: Use page types to show different ads on different page types without complex targeting rules
-4. **Zone for priority**: Use zones to group ads by priority (e.g., all "top" zone ads appear before "middle" zone ads)
+```text
+moda
+seyahat
+wellness
+```
 
-## Backward Compatibility
+## Device rules
 
-- All legacy placement values continue to work
-- API supports both old and new formats
-- Legacy placements are clearly marked in the admin interface
-- Frontend can use placement prefix matching to group both old and new placements
+Canonical device modes:
 
-## Summary
+- `all`
+- `desktop`
+- `tablet`
+- `mobile`
 
-The hierarchical placement system provides:
-- ✅ More granular control over ad placement
-- ✅ Better organization with logical grouping
-- ✅ Enhanced targeting with page types
-- ✅ Flexible ordering with position field
-- ✅ Optional zone classification
-- ✅ Full backward compatibility
-- ✅ Clear migration path for existing installations
+Responsive size mappings remain separate from device eligibility. A slot can be `all` devices and still use breakpoint-specific creative sizes.
+
+## Ordering
+
+`priority` is an operational ordering field from 1–100. Lower values are returned first. It does not replace GAM line-item priority.
+
+## Scheduling
+
+A slot can be:
+
+- `active`
+- `paused`
+- `scheduled`
+
+Active and scheduled slots are returned by the public API only when their optional start/end window is currently live. Paused slots are never returned as public inventory.
+
+## Migration from v1
+
+Existing `gam_placement` values are mapped non-destructively to v2 placement groups. Legacy metadata remains readable for backwards compatibility, but all new admin writes use the canonical v2 schema.

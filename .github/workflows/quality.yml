@@ -1,0 +1,46 @@
+name: Plugin quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  php-syntax:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.2', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+      - name: PHP syntax
+        run: find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l
+
+  static-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Admin JavaScript syntax
+        run: node --check admin/assets/js/admin.js
+      - name: Required v2 files
+        run: |
+          test -f includes/class-hip-ad-schema.php
+          test -f includes/class-hip-ad-repository.php
+          test -f includes/class-hip-ad-migrator.php
+          test -f admin/views/v2/dashboard.php
+          test -f admin/views/v2/slot-edit.php
+          test -f admin/views/v2/settings.php
+          test -f admin/views/v2/diagnostics.php
+      - name: Reject obsolete v1 admin files
+        run: |
+          test ! -f admin/views/settings-page.php
+          test ! -f admin/views/import-page.php
+          test ! -d admin/views/metaboxes
+          test ! -f blocks/ad-slot/save.js

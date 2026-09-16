@@ -1,59 +1,66 @@
 # Changelog
 
-All notable changes to HIP Ad Manager will be documented in this file.
+All notable changes to HIP Ad Manager are documented here.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The project follows Semantic Versioning.
+
+## [2.0.0] - 2026-09-16
+
+### Rebuilt
+- Replaced the fragmented v1 metabox workflow with a dedicated HIP Ads admin application.
+- Introduced a canonical schema v2 and a repository layer as the single source of truth for slot reads/writes.
+- Kept the `hip_ad_slot` post type as an internal persistence layer for backwards compatibility while removing the native CPT editing UI.
+- Added non-destructive migration from legacy v1 metadata and settings.
+
+### Admin UX
+- New dashboard with inventory health, slot statistics, quick actions and diagnostics.
+- New searchable/filterable ad-slot list.
+- New single-screen slot editor for GAM identity, placement, sizes, responsive mappings, page/category/device rules, targeting, CLS reservations, scheduling, refresh policy, status and notes.
+- New settings screen for master enable/disable, network/property code, GPT config, lazy-load config, targeting, caching, debug and ads.txt.
+- New diagnostics screen with validation, duplicate detection and migration/cache actions.
+- New import/export screen with user-scoped previews and JSON backups.
+- Replaced raw JSON editing with structured repeatable controls.
+- Removed jQuery dependency from the plugin admin UI.
+
+### Data & Safety
+- Stable frontend slot keys are now separate from GAM inventory IDs and ad-unit paths.
+- Duplicate slot-key and ad-unit-path validation.
+- Duplicated slots are created paused so placeholder GAM paths cannot accidentally serve.
+- Versioned cache invalidation.
+- Active/paused/scheduled delivery model with schedule enforcement.
+- Device, page-type, category and placement filtering.
+- Responsive min-height reservations for CLS protection.
+- Refresh validation with visibility/background-tab safeguards and 30-second minimum for time/event refresh.
+
+### Import
+- Rebuilt GAM CSV importer as validate → preview → create/update/skip.
+- Existing inventory is updated by ad-unit path or stable key instead of blindly duplicated.
+- Imported size mappings are restricted to creative sizes declared by GAM CSV data.
+- Import preview/result state is isolated per WordPress user.
+
+### Headless API
+- Versioned schema response for `/wp-json/hip-ads/v1/config` and `/slots`.
+- Added `/health` endpoint.
+- Public responses contain only normalized live inventory.
+- ETag, cache headers and cache-version metadata.
+- Debug responses no longer expose PHP/WordPress version details.
+- Gutenberg marker block now uses stable slot keys with legacy numeric-ID fallback.
+- GPT runtime is intentionally delegated to the headless frontend; WordPress acts as the inventory control plane.
+
+### Quality
+- Added GitHub Actions PHP syntax and admin JavaScript checks.
+- Removed unused v1 admin views/metaboxes and obsolete block build artifacts.
+- Updated integration documentation for the modern GPT Config API and SPA slot lifecycle.
 
 ## [1.0.0] - 2026-01-21
 
 ### Added
-- Initial release of HIP Ad Manager
-- Custom Post Type (`hip_ad_slot`) for managing ad slots
-- CSV import functionality from Google Ad Manager exports
-- Automatic placement detection from ad names (header, sidebar, in-content, footer, mobile-sticky, interstitial)
-- Automatic device detection from ad names (mobile, tablet, desktop, all)
-- Automatic size parsing from CSV format
-- REST API endpoints:
-  - `GET /wp-json/hip-ads/v1/config` - Get global configuration
-  - `GET /wp-json/hip-ads/v1/slots` - Get all active ad slots with filtering
-  - `GET /wp-json/hip-ads/v1/slots/{id}` - Get single ad slot
-  - `POST /wp-json/hip-ads/v1/track` - Track impressions/clicks (optional)
-- Admin dashboard with statistics and quick links
-- Settings page for network configuration
-- Import page with CSV upload, preview, and confirmation
-- Ad slot editing with metaboxes:
-  - GAM Information (Slot ID, Ad Unit Path)
-  - Ad Sizes (sizes array, size mappings)
-  - Targeting (key-value pairs)
-  - Display Rules (placement, device, lazy load, display rules)
-  - Status & Priority
-- Predefined responsive size mappings:
-  - Leaderboard (header ads)
-  - MPU (medium rectangle)
-  - Skyscraper (sidebar)
-  - Mobile Sticky
-- Targeting and display rules system
-- Lazy loading support
-- Device-specific ad targeting
-- Priority-based ad ordering
-- Admin CSS for dashboard styling
-- Admin JavaScript for JSON validation
-- Sample CSV template for import
-- Comprehensive README with installation and usage instructions
-- Integration guide (INTEGRATION.md) with examples for Next.js, React, and Vue.js
-- Composer support for PSR-4 autoloading
-- WordPress Coding Standards compliance
-- Proper sanitization and validation
-- Nonce security checks
-- Capability checks for admin functions
-- Internationalization ready (text domain: hip-admanager)
+- Initial HIP Ad Manager release.
+- `hip_ad_slot` custom post type.
+- GAM CSV import.
+- REST configuration and slot endpoints.
+- Legacy metabox-based admin interface.
+- Responsive size mappings, targeting, lazy loading and device rules.
 
-### Security
-- All input sanitized and validated
-- Nonce verification for form submissions
-- Capability checks for admin actions
-- JSON parsing with error handling
-- File upload validation (CSV only)
-
+[2.0.0]: https://github.com/selim-create/hip-admanager/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/selim-create/hip-admanager/releases/tag/v1.0.0

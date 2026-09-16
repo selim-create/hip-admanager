@@ -1,366 +1,241 @@
-# HIP Ad Manager
+# HIP Ad Manager v2
 
-A comprehensive WordPress plugin for Google Ad Manager integration, specifically designed for headless WordPress projects.
+HIP Ad Manager is a headless-first WordPress control plane for Google Ad Manager (GAM). WordPress stores and validates inventory configuration; the frontend owns Google Publisher Tag (GPT) loading and runtime rendering.
 
-## Features
+## Architecture
 
-- **Custom Post Type for Ad Slots**: Manage all your ad slots through a familiar WordPress interface
-- **CSV Import**: Import ad slots directly from Google Ad Manager CSV exports
-- **REST API**: Full-featured REST API for headless WordPress integration
-- **Targeting Rules**: Advanced targeting and display rules
-- **Responsive Size Mappings**: Built-in responsive ad size configurations
-- **Lazy Loading**: Support for lazy loading ads
-- **Device-Specific Ads**: Target specific devices (mobile, tablet, desktop)
-- **Placement Management**: Organize ads by placement (header, sidebar, in-content, footer, etc.)
+### WordPress / HIP Ad Manager
 
-## Installation
+- Inventory and placement management
+- GAM ad-unit paths and responsive size mappings
+- Page/device/category delivery rules
+- Slot and global key-value targeting
+- Refresh policy metadata
+- ads.txt source content
+- Validation, diagnostics, import/export and cache invalidation
+- Read-only headless REST API
 
-1. Upload the `hip-admanager` folder to `/wp-content/plugins/`
-2. Activate the plugin through the 'Plugins' menu in WordPress
-3. Navigate to **HIP Ad Manager** → **Settings** to configure your network code
+### Headless frontend
 
-## Configuration
+- Loads GPT from Google’s official URL
+- Calls the current GPT Config API (`googletag.setConfig`)
+- Defines and destroys slots during SPA navigation
+- Applies page-context targeting
+- Renders, refreshes and observes slots
+- Serves public `/ads.txt` from the plugin API source
 
-### Basic Settings
+The plugin never sends executable advertising JavaScript from WordPress to the frontend.
 
-1. Go to **HIP Ad Manager** → **Settings**
-2. Enter your Google Ad Manager **Network Code** (e.g., 273585429)
-3. Enter your **Site Name** for targeting (e.g., kidsgourmet)
-4. Configure additional options:
-   - Enable/disable lazy loading
-   - Enable/disable single request mode
-   - Set global targeting parameters (JSON format)
+## Admin workflow
 
-### Example Settings
+HIP Ads provides a dedicated WordPress admin application:
 
-```json
-{
-  "networkCode": "273585429",
-  "siteName": "kidsgourmet",
-  "enableLazyLoad": true,
-  "enableSingleRequest": true,
-  "globalTargeting": {
-    "site": "kidsgourmet"
-  }
-}
-```
+1. **Genel Bakış** — inventory status, system health and API summary.
+2. **Reklam Alanları** — searchable/filterable slot list.
+3. **Yeni Alan Ekle** — unified slot editor; no legacy metabox maze.
+4. **İçe / Dışa Aktar** — dry-run CSV preview, idempotent upsert and JSON backup.
+5. **Ayarlar** — GAM network/property, SRA, lazy load, global targeting, cache and ads.txt.
+6. **Tanılama** — schema validation, duplicate checks, unsafe refresh warnings and API endpoints.
 
-## CSV Import
+Existing `hip_ad_slot` posts are preserved. On upgrade, v2 performs a non-destructive migration and adds normalized v2 metadata without deleting legacy fields.
 
-### Importing Ad Slots from Google Ad Manager
+## Slot model
 
-1. Export your ad units from Google Ad Manager as CSV
-2. Go to **HIP Ad Manager** → **Import**
-3. Upload your CSV file
-4. Preview the ad slots that will be created
-5. Confirm the import
+Each slot has separate identifiers:
 
-### CSV Format
+- `key`: stable internal/frontend key, e.g. `article_inline_1`
+- `placementKey`: placement requested by the frontend
+- `placementGroup`: `header`, `content`, `sidebar`, `footer`, `overlay`, `other`
+- `inventoryId`: optional GAM inventory ID
+- `adUnitPath`: full GAM path, e.g. `/1234567/hipinup/article_inline_1`
 
-The CSV should contain the following columns:
+This separation removes the old ambiguity between WordPress post IDs, GAM inventory IDs and frontend DOM/placement identifiers.
 
-```csv
-#ID,Parent Id,Code,Name,Sizes:,Description,Enabled for AdSense,Placements,Target Window,Labels
-```
-
-Example:
-
-```csv
-#ID,Parent Id,Code,Name,Sizes:,Description,Enabled for AdSense,Placements,Target Window,Labels
-23335123404,23335085636,KidsGourmet.com.tr/kidsgourmet_160x600_wideskyscraper_left,kidsgourmet_160x600_WideSkyscraper_Left,120x600; 160x600; 161x600,,no,,_blank,
-23335123656,23335085636,KidsGourmet.com.tr/kidsgourmet_300x250_mediumrectangle,kidsgourmet_300x250_MediumRectangle,250x250; 300x250; 336x280,,no,,_blank,
-```
-
-### Import Logic
-
-During import, the plugin automatically:
-
-- **Parses ad sizes**: Converts `120x600; 160x600` to `[[120,600], [160,600]]`
-- **Determines placement**: Based on ad name keywords (leaderboard → header, mediumrectangle → in-content, etc.)
-- **Determines device**: Based on ad name (mobile → mobile, otherwise desktop or all)
-- **Assigns size mappings**: Based on placement type
-- **Creates ad unit path**: Combines network code with ad code
+Additional slot fields include sizes, responsive mappings, device, page types, category slugs, targeting, lazy-load preference, CLS reserve heights, schedule, priority and refresh policy.
 
 ## REST API
 
-### Endpoints
+Namespace: `/wp-json/hip-ads/v1`
 
-#### Get Configuration
+### `GET /config`
 
-```
-GET /wp-json/hip-ads/v1/config
-```
+Returns global frontend configuration plus all currently deliverable slots.
 
-Returns global configuration including network code, site settings, and global targeting.
+### `GET /slots`
 
-**Response:**
+Returns active or currently-live scheduled slots. Optional filters:
+
+- `device=desktop|tablet|mobile|all`
+- `placement=<placementKey>`
+- `placement_group=header|content|sidebar|footer|overlay|other`
+- `page_type=home|article|category|search|page`
+- `category=<slug>`
+- `key=<stableSlotKey>`
+
+### `GET /slots/{id}`
+
+Returns one live slot by internal WordPress ID.
+
+### `GET /health`
+
+Returns a small non-sensitive health payload suitable for deployment checks.
+
+### `GET /ads-txt`
+
+Returns the managed ads.txt source:
 
 ```json
 {
-  "networkCode": "273585429",
-  "siteName": "kidsgourmet",
-  "enableLazyLoad": true,
-  "enableSingleRequest": true,
-  "globalTargeting": {
-    "site": "kidsgourmet"
-  }
+  "content": "google.com, pub-..., DIRECT, f08c47fec0942fa0",
+  "lineCount": 1
 }
 ```
 
-#### Get All Active Slots
+### `POST /cache/clear`
 
-```
-GET /wp-json/hip-ads/v1/slots
-```
+Admin-authenticated maintenance endpoint. Normal saves already invalidate cache automatically.
 
-**Query Parameters:**
+## Frontend contract
 
-- `device` - Filter by device (mobile, tablet, desktop, all)
-- `placement` - Filter by placement (header, sidebar, in-content, footer, mobile-sticky, interstitial)
-- `page_type` - Filter by page type
-- `category` - Filter by category
-
-**Response:**
+Example config shape:
 
 ```json
 {
-  "networkCode": "273585429",
-  "enableLazyLoad": true,
-  "enableSingleRequest": true,
-  "globalTargeting": {
-    "site": "kidsgourmet"
-  },
-  "slots": [
-    {
-      "id": 123,
-      "name": "kidsgourmet_300x250_MediumRectangle",
-      "slotId": "23335123656",
-      "adUnitPath": "/273585429/KidsGourmet.com.tr/kidsgourmet_300x250_mediumrectangle",
-      "sizes": [[300, 250], [336, 280], [250, 250]],
-      "sizeMappings": [
-        {
-          "viewport": [1024, 0],
-          "sizes": [[300, 250], [336, 280]]
-        },
-        {
-          "viewport": [0, 0],
-          "sizes": [[300, 250]]
-        }
-      ],
-      "targeting": {},
-      "lazyLoad": true,
-      "placement": "in-content",
-      "device": "desktop",
-      "priority": 10
+  "schemaVersion": 2,
+  "adsEnabled": true,
+  "networkCode": "1234567",
+  "propertyCode": "hipinup",
+  "gpt": {
+    "singleRequest": true,
+    "collapseEmpty": true,
+    "lazyLoad": {
+      "fetchMarginPercent": 500,
+      "renderMarginPercent": 200,
+      "mobileScaling": 2
     }
-  ]
+  },
+  "globalTargeting": {
+    "site": "hipinup"
+  },
+  "slots": []
 }
 ```
 
-#### Get Single Slot
+Frontend implementations should use the current GPT Config API instead of deprecated per-service configuration methods:
 
-```
-GET /wp-json/hip-ads/v1/slots/{id}
-```
+```js
+window.googletag = window.googletag || { cmd: [] };
 
-Returns details for a specific ad slot.
+googletag.cmd.push(() => {
+  googletag.setConfig({
+    singleRequest: config.gpt.singleRequest,
+    targeting: config.globalTargeting,
+    lazyLoad: config.gpt.lazyLoad || undefined,
+  });
 
-#### Track (Optional)
+  for (const slot of config.slots) {
+    const gptSlot = googletag.defineSlot(
+      slot.adUnitPath,
+      slot.sizes,
+      `hip-ad-${slot.key}`,
+    );
 
-```
-POST /wp-json/hip-ads/v1/track
-```
+    if (!gptSlot) continue;
 
-Optional endpoint for tracking impressions and clicks.
+    if (slot.sizeMappings?.length) {
+      const builder = googletag.sizeMapping();
+      for (const mapping of slot.sizeMappings) {
+        builder.addSize(mapping.viewport, mapping.sizes);
+      }
+      gptSlot.defineSizeMapping(builder.build());
+    }
 
-## Ad Slot Fields
+    for (const [key, value] of Object.entries(slot.targeting || {})) {
+      gptSlot.setTargeting(key, value);
+    }
 
-Each ad slot includes the following metadata:
+    gptSlot.addService(googletag.pubads());
+  }
 
-- **gam_slot_id**: Google Ad Manager Slot ID
-- **gam_ad_unit_path**: Full ad unit path
-- **gam_sizes**: JSON array of ad sizes (e.g., `[[300, 250], [336, 280]]`)
-- **gam_size_mappings**: JSON array of responsive size mappings
-- **gam_targeting**: JSON object with slot-level targeting
-- **gam_placement**: Placement type (header, sidebar, in-content, footer, mobile-sticky, interstitial)
-- **gam_device**: Device targeting (all, mobile, desktop, tablet)
-- **gam_lazy_load**: Enable/disable lazy loading (boolean)
-- **gam_display_rules**: JSON object with display rules (page types, categories, schedules)
-- **gam_priority**: Priority (1-100, lower = higher priority)
-- **gam_status**: Status (active, paused, scheduled)
-
-## Size Mappings
-
-The plugin includes predefined responsive size mappings:
-
-### Leaderboard (Header Ads)
-
-```json
-[
-  { "viewport": [1024, 0], "sizes": [[970, 250], [970, 90], [728, 90]] },
-  { "viewport": [768, 0], "sizes": [[728, 90]] },
-  { "viewport": [0, 0], "sizes": [[320, 100], [320, 50]] }
-]
-```
-
-### MPU (Medium Rectangle)
-
-```json
-[
-  { "viewport": [768, 0], "sizes": [[300, 600], [300, 250], [336, 280]] },
-  { "viewport": [0, 0], "sizes": [[300, 250]] }
-]
-```
-
-### Skyscraper (Sidebar)
-
-```json
-[
-  { "viewport": [1024, 0], "sizes": [[160, 600], [120, 600]] },
-  { "viewport": [0, 0], "sizes": [] }
-]
-```
-
-### Mobile Sticky
-
-```json
-[
-  { "viewport": [0, 0], "sizes": [[320, 50], [320, 100]] }
-]
-```
-
-## Headless Integration Example
-
-### Next.js / React Example
-
-```javascript
-// Fetch ad configuration
-const fetchAdConfig = async () => {
-  const response = await fetch('https://your-wp-site.com/wp-json/hip-ads/v1/slots?device=mobile&placement=header');
-  const data = await response.json();
-  return data;
-};
-
-// Use in component
-import { useEffect, useState } from 'react';
-
-export default function AdComponent({ placement, device }) {
-  const [adConfig, setAdConfig] = useState(null);
-
-  useEffect(() => {
-    const loadAds = async () => {
-      const config = await fetchAdConfig();
-      setAdConfig(config);
-      
-      // Initialize GPT
-      window.googletag = window.googletag || { cmd: [] };
-      googletag.cmd.push(function() {
-        // Configure GPT based on config
-        googletag.pubads().enableSingleRequest();
-        if (config.enableLazyLoad) {
-          googletag.pubads().enableLazyLoad();
-        }
-        
-        // Define slots
-        config.slots.forEach(slot => {
-          const gptSlot = googletag.defineSlot(
-            slot.adUnitPath,
-            slot.sizes,
-            `div-gpt-ad-${slot.id}`
-          );
-          
-          // Add size mappings
-          if (slot.sizeMappings && slot.sizeMappings.length > 0) {
-            const mapping = googletag.sizeMapping();
-            slot.sizeMappings.forEach(map => {
-              mapping.addSize(map.viewport, map.sizes);
-            });
-            gptSlot.defineSizeMapping(mapping.build());
-          }
-          
-          // Add targeting
-          if (slot.targeting) {
-            Object.keys(slot.targeting).forEach(key => {
-              gptSlot.setTargeting(key, slot.targeting[key]);
-            });
-          }
-          
-          gptSlot.addService(googletag.pubads());
-        });
-        
-        googletag.enableServices();
-      });
-    };
-    
-    loadAds();
-  }, []);
-
-  return (
-    <div id={`div-gpt-ad-${adConfig?.slots[0]?.id}`}>
-      {/* Ad will be rendered here */}
-    </div>
-  );
-}
-```
-
-## Hooks & Filters
-
-### Filters
-
-```php
-// Modify ad slot data before API response
-add_filter('hip_ad_slot_data', function($data, $post_id) {
-    // Modify $data
-    return $data;
-}, 10, 2);
-
-// Modify slots query arguments
-add_filter('hip_ad_slots_query_args', function($args) {
-    // Modify $args
-    return $args;
-});
-
-// Modify imported slot data
-add_filter('hip_ad_import_slot_data', function($slot_data, $csv_row) {
-    // Modify $slot_data
-    return $slot_data;
-}, 10, 2);
-```
-
-### Actions
-
-```php
-// After slot is imported
-add_action('hip_ad_slot_imported', function($post_id, $slot_data) {
-    // Do something
-}, 10, 2);
-
-// After settings are saved
-add_action('hip_ad_settings_saved', function($settings) {
-    // Do something
+  googletag.enableServices();
 });
 ```
+
+Load GPT only from Google’s official source:
+
+```html
+<script async src="https://securepubads.g.doubleclick.net/tag/js/gpt.js"></script>
+```
+
+Do not proxy, self-host or cache `gpt.js` yourself.
+
+For Next.js/App Router navigation, destroy page-specific GPT slots before their DOM containers disappear, then define the new route’s slots. Keep the GPT library itself loaded once for the application lifecycle.
+
+## Refresh safety
+
+Refresh is off by default. For time/event-based refresh:
+
+- v2 enforces a minimum 30-second interval;
+- visibility gating is enabled by default;
+- background-tab pause is enabled by default;
+- the inventory must also be declared as refreshing in Google Ad Manager, matching actual page behavior.
+
+User-action refresh may use a different trigger model, but the frontend remains responsible for refreshing only when that declared trigger actually occurs.
+
+## CSV import
+
+The importer accepts typical GAM CSV columns such as `ID`, `Code`, `Name` and `Sizes`; header punctuation/case variants are normalized.
+
+Import is intentionally two-phase:
+
+1. Upload → parse and validate.
+2. Preview → each row is classified as `CREATE`, `UPDATE` or `INVALID`.
+3. Confirm → changes are committed.
+
+Existing slots match by ad-unit path first, stable key second. Re-importing the same inventory updates instead of creating duplicates. GAM-owned fields are refreshed while custom targeting/delivery overrides are preserved.
+
+Responsive mappings created during import are restricted to sizes actually declared on that GAM ad unit.
+
+## Cache model
+
+The API uses versioned transient cache keys. Every slot/settings mutation increments `hip_ad_cache_version`, making all previous cached responses unreachable immediately without wildcard transient deletion.
+
+## Security
+
+- Admin mutations require `manage_options` plus WordPress nonces.
+- Public endpoints are read-only and contain no credentials.
+- Debug mode exposes only safe cache state, not PHP/WordPress environment details.
+- CSV uploads are extension/size limited and parsed from the temporary upload.
+- All stored data is normalized/sanitized through one schema service.
+
+## Gutenberg
+
+The optional `Ad Slot` block stores a stable slot key, not executable ad code. It renders a semantic marker such as:
+
+```html
+<div
+  class="hip-ad-injection align-center"
+  data-hip-ad-slot-key="article_inline_1"
+  data-hip-ad-placement="content"
+></div>
+```
+
+The headless frontend may translate this marker into its own `AdSlot` component during content rendering.
 
 ## Requirements
 
-- PHP 7.4 or higher
-- WordPress 5.8 or higher
+- WordPress 6.2+
+- PHP 7.4+
+- A headless frontend capable of running Google Publisher Tag
 
-## Support
+## Quality gate
 
-For issues and questions, please visit the [GitHub repository](https://github.com/selim-create/hip-admanager).
+Pull requests run:
 
-## License
+- PHP syntax validation on every PHP file
+- Node syntax validation for admin JavaScript
+- required v2 file checks
 
-GPL v2 or later
+## Upgrade from v1
 
-## Changelog
-
-### 1.0.0
-- Initial release
-- Custom Post Type for ad slots
-- CSV import functionality
-- REST API endpoints
-- Admin interface
-- Responsive size mappings
-- Targeting and display rules
+Activation or first v2 load runs a non-destructive migration. Old metadata remains in place for compatibility. The Diagnostics screen can rerun normalization and surfaces duplicates/invalid legacy records for manual correction rather than silently overwriting them.

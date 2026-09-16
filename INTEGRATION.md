@@ -1,506 +1,323 @@
-# HIP Ad Manager - Integration Guide
+# HIP Ad Manager v2 — Headless Integration Guide
 
-This comprehensive guide explains how to integrate HIP Ad Manager with your headless WordPress project, including advanced features like CLS prevention, caching, refresh logic, and more.
+This guide defines the runtime contract between HIP Ad Manager v2 and a headless frontend such as Next.js.
 
-## Table of Contents
+## Principle
 
-1. [Quick Start](#quick-start)
-2. [API Endpoints](#api-endpoints)
-3. [CLS Prevention](#cls-prevention)
-4. [Cache Strategy](#cache-strategy)
-5. [Dynamic Targeting](#dynamic-targeting)
-6. [Ad Refresh Logic](#ad-refresh-logic)
-7. [Lazy Loading](#lazy-loading)
-8. [In-Content Ads (Gutenberg Block)](#in-content-ads)
-9. [ads.txt Management](#adstxt-management)
-10. [Framework Examples](#framework-examples)
+HIP Ad Manager is a **configuration/control plane**. It does not inject executable GAM tags into content or return arbitrary scripts from WordPress.
 
----
+The frontend is the **runtime/render plane**. It loads GPT once, fetches validated configuration, defines slots, handles SPA route transitions, renders ads and performs any permitted refresh operations.
 
-## Quick Start
+## 1. Load GPT once
 
-### 1. Install & Configure
+Use Google’s official Publisher Tag URL:
 
-1. Install and activate the plugin in WordPress
-2. Navigate to **HIP Ad Manager** → **Settings**
-3. Configure your Google Ad Manager network code (e.g., `273585429`)
-4. Set your site name for targeting (e.g., `kidsgourmet`)
-5. Enable lazy loading and single request mode
-6. Configure cache duration (default: 1 hour)
-7. Add your ads.txt content
-
-### 2. Import Your Ad Slots
-
-1. Export your ad units from Google Ad Manager as CSV
-2. Go to **HIP Ad Manager** → **Import**
-3. Upload the CSV file
-4. Preview and confirm the import
-
----
-
-## API Endpoints
-
-### Get All Slots
-
-```
-GET /wp-json/hip-ads/v1/slots
+```html
+<script async src="https://securepubads.g.doubleclick.net/tag/js/gpt.js"></script>
 ```
 
-**Query Parameters:**
-- `device` - Filter by device (mobile, tablet, desktop, all)
-- `placement` - Filter by placement (header, sidebar, content, footer, etc.)
-- `page_type` - Filter by page type
-- `category` - Filter by category
+Do not proxy or self-host GPT.
 
-**Response:**
+In Next.js, load this once near the application root. Keep the library alive across client-side navigation.
 
-```json
-{
-  "networkCode": "273585429",
-  "enableLazyLoad": true,
-  "enableSingleRequest": true,
-  "globalTargeting": {
-    "site": "kidsgourmet",
-    "env": "production"
-  },
-  "dynamicTargetingKeys": ["category", "tags", "author", "postType", "customKey"],
-  "slots": [
-    {
-      "id": 123,
-      "name": "Header Leaderboard",
-      "slotId": "header-leaderboard",
-      "adUnitPath": "/273585429/header",
-      "sizes": [[970, 250], [728, 90]],
-      "sizeMappings": [...],
-      "targeting": {},
-      "placement": "header",
-      "device": "all",
-      "priority": 10,
-      "minHeight": 250,
-      "responsiveMinHeight": {
-        "desktop": 250,
-        "tablet": 90,
-        "mobile": 100
-      },
-      "placeholder": {
-        "enabled": true,
-        "backgroundColor": "#f0f0f0",
-        "showLabel": true,
-        "labelText": "Advertisement"
-      },
-      "refresh": {
-        "enabled": true,
-        "interval": 30,
-        "maxRefreshes": 10,
-        "refreshOnVisible": true,
-        "pauseOnHidden": true
-      },
-      "lazyLoadConfig": {
-        "enabled": true,
-        "strategy": "intersection",
-        "fetchMarginPercent": 200,
-        "renderMarginPercent": 100,
-        "mobileScaling": 2.0,
-        "idleTimeout": 200
-      }
-    }
-  ]
+## 2. Fetch configuration
+
+```ts
+const API = 'https://api.example.com/wp-json/hip-ads/v1';
+
+export async function getAdsConfig() {
+  const response = await fetch(`${API}/config`, {
+    headers: { Accept: 'application/json' },
+    next: { revalidate: 300 },
+  });
+
+  if (!response.ok) return null;
+  return response.json();
 }
 ```
 
-### Get ads.txt
+For page-specific delivery you may query `/slots` instead:
 
-```
-GET /wp-json/hip-ads/v1/ads-txt
-```
+```ts
+const params = new URLSearchParams({
+  page_type: 'article',
+  category: 'moda',
+  device: 'desktop',
+});
 
-### Clear Cache
-
-```
-POST /wp-json/hip-ads/v1/cache/clear
-```
-
----
-
-## CLS Prevention
-
-Cumulative Layout Shift (CLS) is a critical Core Web Vitals metric. HIP Ad Manager provides automatic CLS prevention through minHeight and placeholder configurations.
-
-### Implementation Example
-
-```javascript
-export default function GoogleAd({ slot }) {
-  const [adLoaded, setAdLoaded] = useState(false);
-
-  const getMinHeight = () => {
-    if (typeof window === 'undefined') return slot.minHeight;
-    
-    const width = window.innerWidth;
-    if (width >= 1024) return slot.responsiveMinHeight.desktop;
-    if (width >= 768) return slot.responsiveMinHeight.tablet;
-    return slot.responsiveMinHeight.mobile;
-  };
-
-  return (
-    <div 
-      id={`ad-${slot.id}`}
-      style={{
-        minHeight: `${getMinHeight()}px`,
-        backgroundColor: !adLoaded && slot.placeholder?.enabled 
-          ? slot.placeholder.backgroundColor 
-          : 'transparent',
-      }}
-    >
-      {!adLoaded && slot.placeholder?.showLabel && (
-        <span>{slot.placeholder.labelText}</span>
-      )}
-    </div>
-  );
-}
+const response = await fetch(`${API}/slots?${params}`);
 ```
 
----
+Do not trust frontend filters as security controls; they are delivery hints for public inventory configuration.
 
-## Cache Strategy
+## 3. Current GPT configuration
 
-### Client-Side Caching
+Use `googletag.setConfig()` for page-level GPT settings.
 
-```javascript
-let cachedConfig = null;
-let cacheTime = null;
-const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
-
-export async function getAdConfig(filters = {}) {
-  if (cachedConfig && cacheTime && Date.now() - cacheTime < CACHE_DURATION) {
-    return cachedConfig;
+```ts
+declare global {
+  interface Window {
+    googletag: any;
   }
-
-  const params = new URLSearchParams(filters);
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_WP_URL}/wp-json/hip-ads/v1/slots?${params}`
-  );
-  
-  const config = await response.json();
-  cachedConfig = config;
-  cacheTime = Date.now();
-  
-  return config;
 }
-```
 
----
-
-## Dynamic Targeting
-
-```javascript
-useEffect(() => {
-  if (!window.googletag) return;
+export function configureGpt(config: any) {
+  window.googletag = window.googletag || { cmd: [] };
 
   window.googletag.cmd.push(() => {
-    const pubads = window.googletag.pubads();
-    
-    // Set dynamic targeting
-    pubads.setTargeting('category', recipe.category);
-    pubads.setTargeting('tags', recipe.tags);
-    pubads.setTargeting('author', recipe.author.slug);
-    pubads.setTargeting('postType', 'recipe');
-    
-    // Refresh ads with new targeting
-    pubads.refresh();
+    window.googletag.setConfig({
+      singleRequest: Boolean(config.gpt?.singleRequest),
+      targeting: config.globalTargeting || {},
+      lazyLoad: config.gpt?.lazyLoad || undefined,
+    });
   });
-}, [recipe]);
-```
-
----
-
-## Ad Refresh Logic
-
-```javascript
-export function useAdRefresh(slot, gptSlot) {
-  const refreshCount = useRef(0);
-  const intervalRef = useRef(null);
-
-  useEffect(() => {
-    if (!slot?.refresh?.enabled || !gptSlot) return;
-
-    const { interval, maxRefreshes } = slot.refresh;
-
-    intervalRef.current = setInterval(() => {
-      if (refreshCount.current >= maxRefreshes) {
-        clearInterval(intervalRef.current);
-        return;
-      }
-
-      window.googletag.cmd.push(() => {
-        window.googletag.pubads().refresh([gptSlot]);
-        refreshCount.current++;
-      });
-    }, interval * 1000);
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [slot, gptSlot]);
 }
 ```
 
----
+Do not build new integrations around deprecated `pubads().enableSingleRequest()` or `pubads().enableLazyLoad()` calls.
 
-## Lazy Loading
+## 4. Define slots from stable keys
 
-```javascript
-export default function LazyAd({ slot }) {
-  const [shouldLoad, setShouldLoad] = useState(false);
-  const containerRef = useRef(null);
+The API separates:
 
-  useEffect(() => {
-    if (!slot?.lazyLoadConfig?.enabled) {
-      setShouldLoad(true);
-      return;
-    }
+- `key`: stable frontend/internal slot key
+- `placementKey`: page placement contract
+- `adUnitPath`: GAM inventory path
+- `inventoryId`: optional GAM inventory identifier
 
-    const { fetchMarginPercent } = slot.lazyLoadConfig;
-    const rootMargin = `${fetchMarginPercent}% 0px`;
-    
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          setShouldLoad(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin }
+Example slot definition:
+
+```ts
+export function defineHipSlot(slot: any) {
+  let definedSlot: any = null;
+
+  window.googletag.cmd.push(() => {
+    const elementId = `hip-ad-${slot.key}`;
+    const gptSlot = window.googletag.defineSlot(
+      slot.adUnitPath,
+      slot.sizes,
+      elementId,
     );
 
-    if (containerRef.current) {
-      observer.observe(containerRef.current);
+    if (!gptSlot) return;
+
+    if (slot.sizeMappings?.length) {
+      const mapping = window.googletag.sizeMapping();
+
+      for (const item of slot.sizeMappings) {
+        mapping.addSize(item.viewport, item.sizes);
+      }
+
+      gptSlot.defineSizeMapping(mapping.build());
     }
 
-    return () => observer.disconnect();
-  }, [slot]);
+    for (const [key, value] of Object.entries(slot.targeting || {})) {
+      gptSlot.setTargeting(key, value as any);
+    }
+
+    gptSlot.addService(window.googletag.pubads());
+    definedSlot = gptSlot;
+  });
+
+  return definedSlot;
+}
+```
+
+## 5. Render only into reserved containers
+
+Reserve dimensions before the ad loads to protect CLS.
+
+```tsx
+export function AdContainer({ slot }: { slot: any }) {
+  const minHeight = slot.responsiveMinHeight?.desktop || slot.minHeight || 0;
 
   return (
-    <div ref={containerRef}>
-      {shouldLoad ? <GoogleAd slot={slot} /> : (
-        <div style={{ minHeight: `${slot.minHeight}px` }} />
-      )}
+    <div
+      className="hip-ad-shell"
+      style={{ minHeight }}
+      data-slot-key={slot.key}
+    >
+      <div id={`hip-ad-${slot.key}`} />
     </div>
   );
 }
 ```
 
----
+For responsive layouts, calculate the appropriate desktop/tablet/mobile reserve height in the frontend without waiting for GPT to load.
 
-## In-Content Ads
+## 6. Enable services after defining the initial page batch
 
-### Using Gutenberg Block
+For Single Request Architecture, define the relevant slots before enabling services/displaying them.
 
-1. Open post/page in WordPress editor
-2. Add "Ad Slot" block
-3. Select ad slot
-4. Configure placement and alignment
-5. Publish
+```ts
+window.googletag.cmd.push(() => {
+  window.googletag.enableServices();
 
-The block outputs HTML with data attributes that can be processed in your headless frontend.
+  for (const slot of pageSlots) {
+    window.googletag.display(`hip-ad-${slot.key}`);
+  }
+});
+```
 
----
+## 7. Next.js / SPA route lifecycle
 
-## ads.txt Management
+Client-side navigation does not reload the page. Page-scoped GPT slots therefore need an explicit lifecycle.
 
-### Next.js
+Recommended sequence:
 
-Create `pages/ads.txt.js`:
+1. Before old route slot containers disappear, call `googletag.destroySlots(oldSlots)`.
+2. Clear old page-level targeting that should not leak to the new route.
+3. Resolve/fetch the new route’s slot configuration.
+4. Define the new route’s slots.
+5. Apply new route targeting.
+6. Display the new slots.
 
-```javascript
-export async function getServerSideProps({ res }) {
+Do not define the same GPT element/slot repeatedly without destroying the previous instance.
+
+## 8. Route targeting
+
+Keep global targeting in the plugin and derive dynamic page targeting in the frontend.
+
+Example:
+
+```ts
+window.googletag.cmd.push(() => {
+  window.googletag.setConfig({
+    targeting: {
+      ...config.globalTargeting,
+      page_type: 'article',
+      category: article.category.key,
+      article_id: String(article.id),
+    },
+  });
+});
+```
+
+Avoid sending personal or sensitive user information as targeting keys.
+
+## 9. Lazy loading
+
+The plugin returns lazy-load defaults under `config.gpt.lazyLoad`. The frontend applies them to GPT.
+
+The default values are designed as safe starting points, not immutable policy. Measure ad viewability, Core Web Vitals and revenue before tuning them.
+
+## 10. Refresh
+
+Refresh is **off by default** at the slot level.
+
+For configured time/event refresh:
+
+- v2 enforces a minimum 30-second interval;
+- visible-only refresh is enabled by default;
+- refresh pauses when the browser tab is hidden by default;
+- the same inventory must be declared as refreshing in Google Ad Manager.
+
+The frontend owns the runtime refresh trigger.
+
+Example visibility-gated pattern:
+
+```ts
+function refreshSlot(gptSlot: any) {
+  if (document.visibilityState !== 'visible') return;
+
+  window.googletag.cmd.push(() => {
+    window.googletag.pubads().refresh([gptSlot]);
+  });
+}
+```
+
+Do not implement uncontrolled refresh loops.
+
+## 11. No-fill and layout collapse
+
+`collapseEmpty` is returned as a delivery preference. The frontend may use GPT’s current collapse configuration and/or its own shell state after slot render events.
+
+Even when collapse is enabled, reserve enough initial height to prevent content from jumping while the request is pending.
+
+## 12. ads.txt
+
+HIP Ad Manager stores the canonical ads.txt source and exposes it at:
+
+```text
+/wp-json/hip-ads/v1/ads-txt
+```
+
+For Next.js App Router, create a root `/ads.txt` route that fetches the JSON source and returns `payload.content` as `text/plain`.
+
+Example:
+
+```ts
+export async function GET() {
   const response = await fetch(
-    `${process.env.NEXT_PUBLIC_WP_URL}/wp-json/hip-ads/v1/ads-txt`
+    'https://api.example.com/wp-json/hip-ads/v1/ads-txt',
+    { next: { revalidate: 300 } },
   );
-  const adsTxt = await response.text();
 
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.write(adsTxt);
-  res.end();
+  const payload = response.ok ? await response.json() : { content: '' };
 
-  return { props: {} };
-}
-
-export default function AdsTxt() {
-  return null;
+  return new Response(payload.content || '', {
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+  });
 }
 ```
 
----
+## 13. Health check
 
-## Debug Mode
+Use:
 
-Debug mode helps AdOps teams verify ad placement and troubleshoot integration issues. When enabled from the admin panel, API responses include additional debug information.
-
-### Enabling Debug Mode
-
-1. Navigate to **HIP Ad Manager** → **Settings**
-2. Under **General Settings**, check **Enable Debug Mode**
-3. Save settings
-
-### API Response (Debug Mode Enabled)
-
-When debug mode is enabled, the `/wp-json/hip-ads/v1/config` endpoint includes:
-
-```json
-{
-  "networkCode": "273585429",
-  "siteName": "kidsgourmet",
-  "enableLazyLoad": true,
-  "enableSingleRequest": true,
-  "debug": {
-    "enabled": true,
-    "timestamp": "2024-01-21T10:30:00+03:00",
-    "cacheStatus": "HIT",
-    "phpVersion": "8.2.0",
-    "wpVersion": "6.4",
-    "pluginVersion": "1.0.0"
-  }
-}
+```text
+GET /wp-json/hip-ads/v1/health
 ```
 
-The `/wp-json/hip-ads/v1/slots` endpoint includes debug info in the main response and for each slot:
+The endpoint intentionally exposes only operational state needed for deployment checks, not server versions or internal WordPress diagnostics.
 
-```json
-{
-  "debug": {
-    "enabled": true,
-    "timestamp": "2024-01-21T10:30:00+03:00",
-    "cacheStatus": "HIT",
-    "phpVersion": "8.2.0",
-    "wpVersion": "6.4",
-    "pluginVersion": "1.0.0"
-  },
-  "slots": [
-    {
-      "id": 123,
-      "name": "Header Banner",
-      "slotId": "header-leaderboard",
-      "adUnitPath": "/273585429/header",
-      "sizes": [[970, 250], [728, 90]],
-      "debug": {
-        "postId": 123,
-        "postStatus": "publish",
-        "created": "2024-01-15 10:00:00",
-        "modified": "2024-01-20 15:30:00",
-        "sizesRaw": "[[970,250],[728,90]]",
-        "filteredMeta": {
-          "gam_slot_id": "header-leaderboard",
-          "gam_placement": "header",
-          "gam_status": "active"
-        },
-        "sizeLabel": "970x250, 728x90",
-        "displayInfo": "Slot ID: header-leaderboard | Sizes: 970x250, 728x90 | Placement: header"
-      }
-    }
-  ]
-}
+## 14. Gutenberg markers
+
+The optional WordPress block renders a stable marker, not ad JavaScript:
+
+```html
+<div
+  class="hip-ad-injection align-center"
+  data-hip-ad-slot-key="article_inline_1"
+  data-hip-ad-placement="content"
+></div>
 ```
 
-### Frontend Debug Component (Next.js Example)
+A headless content renderer can replace/map these markers to its native `AdSlot` component.
 
-```tsx
-interface AdSlotProps {
-  slot: AdSlotType;
-}
+## 15. Failure behavior
 
-export function AdSlot({ slot }: AdSlotProps) {
-  const { config } = useAds();
-  const isDebugMode = config?.debug?.enabled;
-  
-  if (isDebugMode) {
-    // Debug mode: Display placeholder box with slot details
-    return (
-      <div
-        style={{
-          minHeight: `${slot.minHeight}px`,
-          backgroundColor: '#f0f0f0',
-          border: '2px dashed #666',
-          padding: '20px',
-          textAlign: 'center',
-          fontFamily: 'monospace'
-        }}
-      >
-        <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '10px' }}>
-          DEBUG MODE
-        </div>
-        <div style={{ fontSize: '12px' }}>
-          {slot.debug?.displayInfo}
-        </div>
-        <div style={{ fontSize: '10px', marginTop: '5px', color: '#666' }}>
-          Post ID: {slot.debug?.postId} | Min Height: {slot.minHeight}px
-        </div>
-      </div>
-    );
-  }
-  
-  // Normal ad rendering
-  return <GoogleAd slot={slot} />;
-}
-```
+The frontend should fail closed and preserve UX:
 
-### Debug Mode Use Cases
+- API unavailable → render no ad, keep layout rules intentional.
+- Slot missing → render nothing for that placement.
+- GPT blocked → do not retry aggressively.
+- Invalid GAM slot → surface in development/debug tooling, not to readers.
+- Route navigation → always destroy old route slots.
 
-1. **Ad Placement Testing**: AdOps team can visually verify that ads appear in the correct locations on the page
-2. **Size Validation**: Each placeholder shows which ad sizes are configured for that slot
-3. **API Response Inspection**: Network tab shows all slot details and metadata for troubleshooting
-4. **Cache Debugging**: The `cacheStatus` field helps verify whether responses are being served from cache
-5. **Integration Verification**: Confirm that all required slots are loading and properly configured
+## 16. Recommended integration boundary
 
-### Security Note
+Keep these values in WordPress/API:
 
-Debug mode should only be enabled in development or staging environments. In production, debug information could expose internal implementation details. Always disable debug mode before launching to production.
+- network code
+- ad unit path
+- stable slot/placement keys
+- sizes and responsive mapping
+- global/slot targeting
+- page/device/category rules
+- refresh policy
+- lazy-load preference
+- CLS reserve heights
+- master on/off switch
 
-**Important**: Debug information is filtered to only include GAM-specific metadata fields. Sensitive WordPress metadata (like custom fields unrelated to ad management) is excluded from debug responses for security.
+Keep these responsibilities in the frontend:
 
----
+- GPT script loading
+- consent/measurement gating
+- DOM element lifecycle
+- route-aware targeting
+- `defineSlot`, `display`, `destroySlots`, `refresh`
+- viewport observation
+- public `/ads.txt` response
 
-## Framework Examples
-
-### Next.js with Device Detection
-
-```javascript
-// middleware.js
-import { NextResponse } from 'next/server';
-
-export function middleware(request) {
-  const userAgent = request.headers.get('user-agent') || '';
-  
-  let device = 'desktop';
-  if (/mobile/i.test(userAgent)) device = 'mobile';
-  else if (/tablet|ipad/i.test(userAgent)) device = 'tablet';
-  
-  const response = NextResponse.next();
-  response.headers.set('x-device-type', device);
-  
-  return response;
-}
-```
-
----
-
-## Best Practices
-
-1. **Cache Wisely**: Cache ad configuration but allow manual clearing
-2. **CLS Prevention**: Always use minHeight and placeholders
-3. **Lazy Load**: Use IntersectionObserver for better performance
-4. **Refresh Responsibly**: Limit refresh count and respect visibility
-5. **Dynamic Targeting**: Update targeting based on page context
-6. **Error Handling**: Always handle API errors gracefully
-7. **Testing**: Test on multiple devices and screen sizes
-8. **Monitoring**: Monitor Core Web Vitals and ad performance
-
----
-
-## Additional Resources
-
-- [Google Publisher Tag (GPT) Documentation](https://developers.google.com/publisher-tag/guides/get-started)
-- [Google Ad Manager Help Center](https://support.google.com/admanager)
-- [Core Web Vitals](https://web.dev/vitals/)
-- [HIP Ad Manager GitHub Repository](https://github.com/selim-create/hip-admanager)
+This boundary allows AdOps changes without frontend deployments while keeping performance-sensitive JavaScript deterministic and version-controlled.

@@ -1,121 +1,43 @@
 <?php
 /**
- * Targeting rules
+ * Context matching helpers for normalized slots.
  *
  * @package HIP_Ad_Manager
  */
 
-// Exit if accessed directly
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/**
- * HIP Ad Targeting class
- */
 class HIP_Ad_Targeting {
 
-	/**
-	 * Constructor
-	 */
-	public function __construct() {
-		// Add any targeting-specific hooks here
-	}
-
-	/**
-	 * Apply targeting rules to slots
-	 *
-	 * @param array $slots
-	 * @param array $context
-	 * @return array
-	 */
 	public function apply_rules( $slots, $context = array() ) {
-		$filtered_slots = array();
-
-		foreach ( $slots as $slot ) {
-			if ( $this->should_display_slot( $slot, $context ) ) {
-				$filtered_slots[] = $slot;
+		return array_values( array_filter( (array) $slots, function( $slot ) use ( $context ) {
+			if ( $slot instanceof WP_Post ) {
+				$slot = HIP_Ad_Repository::from_post( $slot );
 			}
-		}
-
-		return $filtered_slots;
+			return is_array( $slot ) && $this->matches( $slot, $context );
+		} ) );
 	}
 
-	/**
-	 * Check if slot should be displayed based on rules
-	 *
-	 * @param array $slot
-	 * @param array $context
-	 * @return bool
-	 */
-	private function should_display_slot( $slot, $context ) {
-		// Get display rules
-		$display_rules = get_post_meta( $slot->ID, 'gam_display_rules', true );
-		
-		if ( empty( $display_rules ) ) {
-			return true;
+	public function matches( $slot, $context = array() ) {
+		$slot = HIP_Ad_Schema::normalize_slot( $slot );
+		if ( ! HIP_Ad_Repository::is_live( $slot ) ) {
+			return false;
 		}
 
-		$rules = json_decode( $display_rules, true );
-		
-		if ( ! is_array( $rules ) ) {
-			return true;
+		if ( ! empty( $context['device'] ) && 'all' !== $slot['device'] && $slot['device'] !== sanitize_key( $context['device'] ) ) {
+			return false;
 		}
-
-		// Check page types
-		if ( isset( $rules['page_types'] ) && ! empty( $rules['page_types'] ) && isset( $context['page_type'] ) ) {
-			if ( ! in_array( $context['page_type'], $rules['page_types'], true ) ) {
+		if ( ! empty( $context['page_type'] ) && ! in_array( 'all', $slot['page_types'], true ) && ! in_array( sanitize_key( $context['page_type'] ), $slot['page_types'], true ) ) {
+			return false;
+		}
+		if ( ! empty( $slot['categories'] ) && ! empty( $context['categories'] ) ) {
+			$categories = array_map( 'sanitize_title', (array) $context['categories'] );
+			if ( ! array_intersect( $slot['categories'], $categories ) ) {
 				return false;
 			}
 		}
-
-		// Check categories
-		if ( isset( $rules['categories'] ) && ! empty( $rules['categories'] ) && isset( $context['categories'] ) ) {
-			$has_matching_category = false;
-			foreach ( $context['categories'] as $cat ) {
-				if ( in_array( $cat, $rules['categories'], true ) ) {
-					$has_matching_category = true;
-					break;
-				}
-			}
-			if ( ! $has_matching_category ) {
-				return false;
-			}
-		}
-
-		// Check schedule
-		if ( isset( $rules['schedule'] ) && ! empty( $rules['schedule'] ) ) {
-			if ( ! $this->check_schedule( $rules['schedule'] ) ) {
-				return false;
-			}
-		}
-
-		return true;
-	}
-
-	/**
-	 * Check if current time is within schedule
-	 *
-	 * @param array $schedule
-	 * @return bool
-	 */
-	private function check_schedule( $schedule ) {
-		$current_time = current_time( 'timestamp' );
-
-		if ( isset( $schedule['start_date'] ) && ! empty( $schedule['start_date'] ) ) {
-			$start_time = strtotime( $schedule['start_date'] );
-			if ( $current_time < $start_time ) {
-				return false;
-			}
-		}
-
-		if ( isset( $schedule['end_date'] ) && ! empty( $schedule['end_date'] ) ) {
-			$end_time = strtotime( $schedule['end_date'] );
-			if ( $current_time > $end_time ) {
-				return false;
-			}
-		}
-
 		return true;
 	}
 }

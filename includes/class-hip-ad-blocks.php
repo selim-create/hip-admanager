@@ -1,309 +1,78 @@
 <?php
 /**
- * Gutenberg Blocks Registration
+ * Gutenberg ad-slot marker block.
  *
  * @package HIP_Ad_Manager
  */
 
-// Exit if accessed directly
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/**
- * HIP Ad Blocks class
- */
 class HIP_Ad_Blocks {
 
-	/**
-	 * Constructor
-	 */
 	public function __construct() {
-		add_action( 'init', array( $this, 'register_blocks' ) );
-		add_action( 'enqueue_block_editor_assets', array( $this, 'enqueue_block_editor_assets' ) );
-		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_frontend_assets' ) );
-	}
-
-	/**
-	 * Register Gutenberg blocks
-	 */
-	public function register_blocks() {
-		// Register the ad slot block
-		register_block_type(
-			'hip-admanager/ad-slot',
-			array(
-				'render_callback' => array( $this, 'render_ad_slot_block' ),
-				'attributes'      => array(
-					'slotId'    => array(
-						'type'    => 'string',
-						'default' => '',
-					),
-					'placement' => array(
-						'type'    => 'string',
-						'default' => 'in-content',
-					),
-					'alignment' => array(
-						'type'    => 'string',
-						'default' => 'center',
-					),
-				),
-			)
-		);
-	}
-
-	/**
-	 * Enqueue block editor assets
-	 * 
-	 * Note: We use inline JavaScript registration instead of a build step to:
-	 * 1. Avoid requiring Node.js and npm dependencies
-	 * 2. Simplify plugin installation and deployment
-	 * 3. Reduce build complexity for WordPress plugin hosting
-	 * 4. Maintain compatibility with standard WordPress hosting environments
-	 * 
-	 * This approach uses WordPress's built-in block editor APIs and is fully
-	 * compatible with the Gutenberg editor. For production sites requiring
-	 * advanced features or performance optimization, a build step can be added
-	 * using the included package.json (run `npm install && npm run build`).
-	 * 
-	 * Performance consideration: The inline script is ~6KB minified and only
-	 * loads in the block editor (admin), not on the frontend. This hook only
-	 * fires when the block editor is active.
-	 */
-	public function enqueue_block_editor_assets() {
-		// Enqueue inline script for now (simpler than building)
-		wp_add_inline_script(
-			'wp-blocks',
-			$this->get_block_script(),
-			'after'
-		);
-
-		// Enqueue editor styles
-		wp_enqueue_style(
-			'hip-ad-slot-editor-style',
-			HIP_AD_MANAGER_PLUGIN_URL . 'blocks/ad-slot/editor.css',
-			array(),
-			HIP_AD_MANAGER_VERSION
-		);
-	}
-
-	/**
-	 * Enqueue frontend assets
-	 */
-	public function enqueue_frontend_assets() {
-		// Enqueue frontend styles
-		wp_enqueue_style(
-			'hip-ad-slot-style',
-			HIP_AD_MANAGER_PLUGIN_URL . 'blocks/ad-slot/style.css',
-			array(),
-			HIP_AD_MANAGER_VERSION
-		);
-	}
-
-	/**
-	 * Get block registration script
-	 *
-	 * @return string
-	 */
-	private function get_block_script() {
-		ob_start();
-		?>
-(function(blocks, element, blockEditor, components, data, i18n, coreData) {
-	var el = element.createElement;
-	var __ = i18n.__;
-	var registerBlockType = blocks.registerBlockType;
-	var InspectorControls = blockEditor.InspectorControls;
-	var useBlockProps = blockEditor.useBlockProps;
-	var SelectControl = components.SelectControl;
-	var PanelBody = components.PanelBody;
-	var Notice = components.Notice;
-	var useSelect = data.useSelect;
-
-	registerBlockType('hip-admanager/ad-slot', {
-		title: __('Ad Slot', 'hip-admanager'),
-		icon: 'megaphone',
-		category: 'widgets',
-		description: __('Insert an ad slot into your content', 'hip-admanager'),
-		attributes: {
-			slotId: {
-				type: 'string',
-				default: ''
-			},
-			placement: {
-				type: 'string',
-				default: 'in-content'
-			},
-			alignment: {
-				type: 'string',
-				default: 'center'
-			}
-		},
-		supports: {
-			align: ['wide', 'full', 'center'],
-			html: false
-		},
-		
-		edit: function(props) {
-			var attributes = props.attributes;
-			var setAttributes = props.setAttributes;
-			var slotId = attributes.slotId;
-			var placement = attributes.placement;
-			var alignment = attributes.alignment;
-
-			var slots = useSelect(function(select) {
-				return select('core').getEntityRecords('postType', 'hip_ad_slot', {
-					per_page: -1,
-					status: 'publish'
-				});
-			}, []);
-
-			var slotOptions = [
-				{ label: __('Select an ad slot', 'hip-admanager'), value: '' }
-			];
-
-			if (slots && slots.length > 0) {
-				slots.forEach(function(slot) {
-					slotOptions.push({
-						label: slot.title.rendered || 'Slot #' + slot.id,
-						value: slot.id.toString()
-					});
-				});
-			}
-
-			var selectedSlot = slots && slots.find(function(slot) {
-				return slot.id.toString() === slotId;
-			});
-
-			return el(
-				element.Fragment,
-				{},
-				el(
-					InspectorControls,
-					{},
-					el(
-						PanelBody,
-						{ title: __('Ad Slot Settings', 'hip-admanager') },
-						el(SelectControl, {
-							label: __('Select Ad Slot', 'hip-admanager'),
-							value: slotId,
-							options: slotOptions,
-							onChange: function(value) {
-								setAttributes({ slotId: value });
-							}
-						}),
-						el(SelectControl, {
-							label: __('Placement', 'hip-admanager'),
-							value: placement,
-							options: [
-								{ label: __('In-Content', 'hip-admanager'), value: 'in-content' },
-								{ label: __('Above Content', 'hip-admanager'), value: 'above-content' },
-								{ label: __('Below Content', 'hip-admanager'), value: 'below-content' }
-							],
-							onChange: function(value) {
-								setAttributes({ placement: value });
-							}
-						}),
-						el(SelectControl, {
-							label: __('Alignment', 'hip-admanager'),
-							value: alignment,
-							options: [
-								{ label: __('Left', 'hip-admanager'), value: 'left' },
-								{ label: __('Center', 'hip-admanager'), value: 'center' },
-								{ label: __('Right', 'hip-admanager'), value: 'right' }
-							],
-							onChange: function(value) {
-								setAttributes({ alignment: value });
-							}
-						})
-					)
-				),
-				el(
-					'div',
-					useBlockProps(),
-					el(
-						'div',
-						{
-							className: 'hip-ad-placeholder align-' + alignment,
-							style: {
-								padding: '20px',
-								border: '2px dashed #ccc',
-								backgroundColor: '#f9f9f9',
-								textAlign: alignment,
-								minHeight: '100px',
-								display: 'flex',
-								alignItems: 'center',
-								justifyContent: 'center'
-							}
-						},
-						!slotId && el('p', {}, '📢 ' + __('Please select an ad slot from the sidebar', 'hip-admanager')),
-						slotId && selectedSlot && el(
-							'div',
-							{},
-							el('p', { style: { margin: '0 0 10px 0', fontSize: '14px', fontWeight: 'bold' } },
-								'📢 ' + __('Ad Slot:', 'hip-admanager') + ' ' + selectedSlot.title.rendered
-							),
-							el('p', { style: { margin: 0, fontSize: '12px', color: '#666' } },
-								__('ID:', 'hip-admanager') + ' ' + slotId + ' | ' + __('Placement:', 'hip-admanager') + ' ' + placement
-							)
-						),
-						slotId && !selectedSlot && !slots && el('p', {}, __('Loading...', 'hip-admanager')),
-						slotId && !selectedSlot && slots && el(Notice, {
-							status: 'warning',
-							isDismissible: false
-						}, __('Selected ad slot not found', 'hip-admanager'))
-					)
-				)
-			);
-		},
-		
-		save: function(props) {
-			var attributes = props.attributes;
-			
-			return el(
-				'div',
-				{
-					className: 'hip-ad-injection align-' + attributes.alignment,
-					'data-hip-ad-slot': attributes.slotId,
-					'data-hip-ad-placement': attributes.placement,
-					'data-hip-ad-alignment': attributes.alignment
-				}
-			);
+		if ( did_action( 'init' ) ) {
+			$this->register_blocks();
+		} else {
+			add_action( 'init', array( $this, 'register_blocks' ) );
 		}
-	});
-})(
-	window.wp.blocks,
-	window.wp.element,
-	window.wp.blockEditor,
-	window.wp.components,
-	window.wp.data,
-	window.wp.i18n,
-	window.wp.coreData
-);
-		<?php
-		return ob_get_clean();
+		add_action( 'enqueue_block_editor_assets', array( $this, 'enqueue_block_editor_assets' ) );
 	}
 
-	/**
-	 * Render ad slot block
-	 *
-	 * @param array $attributes Block attributes
-	 * @return string
-	 */
-	public function render_ad_slot_block( $attributes ) {
-		$slot_id   = isset( $attributes['slotId'] ) ? $attributes['slotId'] : '';
-		$placement = isset( $attributes['placement'] ) ? $attributes['placement'] : 'in-content';
-		$alignment = isset( $attributes['alignment'] ) ? $attributes['alignment'] : 'center';
+	public function register_blocks() {
+		if ( WP_Block_Type_Registry::get_instance()->is_registered( 'hip-admanager/ad-slot' ) ) {
+			return;
+		}
+		register_block_type( 'hip-admanager/ad-slot', array(
+			'render_callback' => array( $this, 'render_ad_slot_block' ),
+			'attributes'      => array(
+				'slotKey'   => array( 'type' => 'string', 'default' => '' ),
+				'slotId'    => array( 'type' => 'string', 'default' => '' ),
+				'placement' => array( 'type' => 'string', 'default' => 'content' ),
+				'alignment' => array( 'type' => 'string', 'default' => 'center' ),
+			),
+		) );
+	}
 
-		if ( empty( $slot_id ) ) {
+	public function enqueue_block_editor_assets() {
+		wp_register_script(
+			'hip-ad-block-editor-v2',
+			false,
+			array( 'wp-blocks', 'wp-element', 'wp-block-editor', 'wp-components', 'wp-api-fetch', 'wp-i18n' ),
+			HIP_AD_MANAGER_VERSION,
+			true
+		);
+		wp_enqueue_script( 'hip-ad-block-editor-v2' );
+		wp_add_inline_script( 'hip-ad-block-editor-v2', $this->editor_script() );
+		wp_enqueue_style( 'hip-ad-slot-editor-style', HIP_AD_MANAGER_PLUGIN_URL . 'blocks/ad-slot/editor.css', array(), HIP_AD_MANAGER_VERSION );
+	}
+
+	private function editor_script() {
+		$path = '/hip-ads/v1/inventory';
+		return '(function(wp){\n' .
+			'const el=wp.element.createElement; const __=wp.i18n.__; const {registerBlockType}=wp.blocks; const {InspectorControls,useBlockProps}=wp.blockEditor; const {PanelBody,SelectControl,Notice}=wp.components;\n' .
+			'registerBlockType("hip-admanager/ad-slot",{title:__("Ad Slot","hip-admanager"),icon:"megaphone",category:"widgets",description:__("Place a HIP Ads slot marker in content.","hip-admanager"),attributes:{slotKey:{type:"string",default:""},slotId:{type:"string",default:""},placement:{type:"string",default:"content"},alignment:{type:"string",default:"center"}},supports:{html:false},edit:function(props){const a=props.attributes,set=props.setAttributes; const [slots,setSlots]=wp.element.useState([]); const [error,setError]=wp.element.useState(false); wp.element.useEffect(function(){wp.apiFetch({path:"' . esc_js( $path ) . '"}).then(function(data){setSlots(data&&data.slots?data.slots:[]);}).catch(function(){setError(true);});},[]); const options=[{label:__("Select ad slot","hip-admanager"),value:""}].concat(slots.map(function(s){return {label:s.name+" · "+s.key+" · "+s.status,value:s.key};})); const selected=slots.find(function(s){return s.key===a.slotKey;}); const blockProps=useBlockProps({className:"hip-ad-block-editor"}); return el(wp.element.Fragment,{},el(InspectorControls,{},el(PanelBody,{title:__("Ad slot","hip-admanager")},el(SelectControl,{label:__("Slot","hip-admanager"),value:a.slotKey,options:options,onChange:function(v){const found=slots.find(function(s){return s.key===v;});set({slotKey:v,slotId:found?String(found.id):"",placement:found?found.placementGroup:"content"});}}),el(SelectControl,{label:__("Alignment","hip-admanager"),value:a.alignment,options:[{label:__("Left","hip-admanager"),value:"left"},{label:__("Center","hip-admanager"),value:"center"},{label:__("Right","hip-admanager"),value:"right"}],onChange:function(v){set({alignment:v});}}))),el("div",blockProps,error?el(Notice,{status:"error",isDismissible:false},__("HIP Ads inventory could not be loaded.","hip-admanager")):el("div",{className:"hip-ad-placeholder"},a.slotKey?el(wp.element.Fragment,{},el("strong",{},selected?selected.name:a.slotKey),el("small",{},a.slotKey+(selected?" · "+selected.status:""))):el("span",{},__("Choose an ad slot from block settings.","hip-admanager")))));},save:function(){return null;}});\n' .
+		'})(window.wp);';
+	}
+
+	public function render_ad_slot_block( $attributes ) {
+		$key = isset( $attributes['slotKey'] ) ? HIP_Ad_Schema::sanitize_key( $attributes['slotKey'] ) : '';
+		$legacy_id = isset( $attributes['slotId'] ) ? absint( $attributes['slotId'] ) : 0;
+		if ( ! $key && $legacy_id ) {
+			$legacy = HIP_Ad_Repository::get( $legacy_id );
+			$key = $legacy ? $legacy['key'] : '';
+		}
+		if ( ! $key ) {
 			return '';
 		}
-
+		$alignment = isset( $attributes['alignment'] ) ? sanitize_key( $attributes['alignment'] ) : 'center';
+		$placement = isset( $attributes['placement'] ) ? HIP_Ad_Schema::sanitize_key( $attributes['placement'] ) : 'content';
 		return sprintf(
-			'<div class="hip-ad-injection align-%s" data-hip-ad-slot="%s" data-hip-ad-placement="%s" data-hip-ad-alignment="%s"></div>',
+			'<div class="hip-ad-injection align-%1$s" data-hip-ad-slot-key="%2$s" data-hip-ad-slot="%2$s" data-hip-ad-placement="%3$s"></div>',
 			esc_attr( $alignment ),
-			esc_attr( $slot_id ),
-			esc_attr( $placement ),
-			esc_attr( $alignment )
+			esc_attr( $key ),
+			esc_attr( $placement )
 		);
 	}
 }
-
