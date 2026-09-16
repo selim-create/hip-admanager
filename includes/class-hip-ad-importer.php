@@ -423,6 +423,7 @@ class HIP_Ad_Importer {
 			if ( ! empty( $mapped ) ) {
 				$result[] = array( 'viewport' => $mapping['viewport'], 'sizes' => $mapped );
 			}
+		}
 
 		if ( empty( $result ) && ! empty( $declared_sizes ) ) {
 			$result[] = array( 'viewport' => array( 0, 0 ), 'sizes' => HIP_Ad_Schema::normalize_sizes( $declared_sizes ) );
