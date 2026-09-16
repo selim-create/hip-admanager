@@ -38,7 +38,7 @@ class HIP_Ad_Blocks {
 	public function enqueue_block_editor_assets() {
 		wp_register_script(
 			'hip-ad-block-editor-v2',
-			'',
+			false,
 			array( 'wp-blocks', 'wp-element', 'wp-block-editor', 'wp-components', 'wp-api-fetch', 'wp-i18n' ),
 			HIP_AD_MANAGER_VERSION,
 			true
