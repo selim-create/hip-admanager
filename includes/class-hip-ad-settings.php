@@ -1,164 +1,130 @@
 <?php
 /**
- * Settings management
+ * Settings service.
  *
  * @package HIP_Ad_Manager
  */
 
-// Exit if accessed directly
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-/**
- * HIP Ad Settings class
- */
 class HIP_Ad_Settings {
 
-	/**
-	 * Option name
-	 */
 	const OPTION_NAME = 'hip_ad_manager_settings';
+	const ADS_TXT_OPTION = 'hip_ad_ads_txt_content';
 
-	/**
-	 * Constructor
-	 */
 	public function __construct() {
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
 	}
 
-	/**
-	 * Register settings
-	 */
 	public function register_settings() {
 		register_setting(
 			'hip_ad_manager_settings_group',
 			self::OPTION_NAME,
 			array(
+				'type'              => 'array',
 				'sanitize_callback' => array( $this, 'sanitize_settings' ),
+				'default'           => HIP_Ad_Schema::settings_defaults(),
 			)
 		);
 	}
 
-	/**
-	 * Sanitize settings
-	 *
-	 * @param array $input
-	 * @return array
-	 */
 	public function sanitize_settings( $input ) {
-		$sanitized = array();
-
-		$sanitized['ads_enabled'] = ! empty( $input['ads_enabled'] ) ? 1 : 0;
-
-		if ( isset( $input['network_code'] ) ) {
-			$sanitized['network_code'] = sanitize_text_field( $input['network_code'] );
-		}
-
-		if ( isset( $input['site_name'] ) ) {
-			$sanitized['site_name'] = sanitize_text_field( $input['site_name'] );
-		}
-
-		$sanitized['enable_lazy_load'] = ! empty( $input['enable_lazy_load'] ) ? 1 : 0;
-		$sanitized['enable_single_request'] = ! empty( $input['enable_single_request'] ) ? 1 : 0;
-		$sanitized['enable_services'] = ! empty( $input['enable_services'] ) ? 1 : 0;
-		$sanitized['debug_mode'] = ! empty( $input['debug_mode'] ) ? 1 : 0;
-
-		if ( isset( $input['global_targeting'] ) ) {
-			$targeting = json_decode( stripslashes( $input['global_targeting'] ), true );
-			if ( json_last_error() === JSON_ERROR_NONE ) {
-				$sanitized['global_targeting'] = wp_json_encode( $targeting );
-			}
-		}
-
-		if ( isset( $input['default_size_mappings'] ) ) {
-			$size_mappings = json_decode( stripslashes( $input['default_size_mappings'] ), true );
-			if ( json_last_error() === JSON_ERROR_NONE ) {
-				$sanitized['default_size_mappings'] = wp_json_encode( $size_mappings );
-			}
-		}
-		
-		// Save cache duration
-		if ( isset( $input['cache_duration'] ) ) {
-			$sanitized['cache_duration'] = absint( $input['cache_duration'] );
-		}
-		
-		// Save ads.txt separately (not in main settings array)
-		if ( isset( $input['ads_txt_content'] ) ) {
-			update_option( 'hip_ad_ads_txt_content', sanitize_textarea_field( $input['ads_txt_content'] ) );
-		}
-
-		return $sanitized;
+		return HIP_Ad_Schema::normalize_settings( $input, self::get_all() );
 	}
 
-	/**
-	 * Get setting value
-	 *
-	 * @param string $key
-	 * @param mixed  $default
-	 * @return mixed
-	 */
-	public static function get( $key, $default = '' ) {
-		$settings = get_option( self::OPTION_NAME, array() );
-		return isset( $settings[ $key ] ) ? $settings[ $key ] : $default;
+	public static function update( $input ) {
+		$current = self::get_all();
+		$settings = HIP_Ad_Schema::normalize_settings( $input, $current );
+		$errors = HIP_Ad_Schema::validate_settings( $settings );
+		if ( $errors->has_errors() ) {
+			return $errors;
+		}
+		update_option( self::OPTION_NAME, $settings, false );
+		HIP_Ad_Repository::bump_cache_version();
+		do_action( 'hip_ad_settings_saved', $settings );
+		return $settings;
 	}
 
-	/**
-	 * Get all settings
-	 *
-	 * @return array
-	 */
+	public static function get( $key, $default = null ) {
+		$settings = self::get_all();
+		if ( array_key_exists( $key, $settings ) ) {
+			return $settings[ $key ];
+		}
+		if ( null !== $default ) {
+			return $default;
+		}
+		$defaults = HIP_Ad_Schema::settings_defaults();
+		return array_key_exists( $key, $defaults ) ? $defaults[ $key ] : '';
+	}
+
 	public static function get_all() {
-		return get_option( self::OPTION_NAME, array() );
+		$stored = get_option( self::OPTION_NAME, array() );
+		$stored = is_array( $stored ) ? $stored : array();
+		if ( empty( $stored['property_code'] ) && ! empty( $stored['site_name'] ) ) {
+			$stored['property_code'] = $stored['site_name'];
+		}
+		return HIP_Ad_Schema::normalize_settings( $stored );
 	}
 
-	/**
-	 * Get default size mappings
-	 *
-	 * @return array
-	 */
 	public static function get_default_size_mappings() {
+		return HIP_Ad_Schema::size_presets();
+	}
+
+	public static function get_ads_txt() {
+		return (string) get_option( self::ADS_TXT_OPTION, '' );
+	}
+
+	public static function update_ads_txt( $content ) {
+		$content = self::sanitize_ads_txt( $content );
+		update_option( self::ADS_TXT_OPTION, $content, false );
+		HIP_Ad_Repository::bump_cache_version();
+		return $content;
+	}
+
+	public static function sanitize_ads_txt( $content ) {
+		$content = str_replace( array( "\r\n", "\r" ), "\n", wp_unslash( (string) $content ) );
+		$lines = explode( "\n", $content );
+		$clean = array();
+		foreach ( $lines as $line ) {
+			$line = trim( wp_strip_all_tags( $line ) );
+			if ( '' === $line ) {
+				$clean[] = '';
+				continue;
+			}
+			if ( '#' === substr( $line, 0, 1 ) ) {
+				$clean[] = '# ' . trim( substr( $line, 1 ) );
+				continue;
+			}
+			// ads.txt rows are comma-delimited; keep publisher identifiers intact.
+			$parts = array_map( 'trim', explode( ',', $line ) );
+			$parts = array_map( 'sanitize_text_field', $parts );
+			$clean[] = implode( ', ', $parts );
+		}
+		return trim( preg_replace( "/\n{3,}/", "\n\n", implode( "\n", $clean ) ) );
+	}
+
+	public static function client_config() {
+		$settings = self::get_all();
 		return array(
-			'leaderboard'    => array(
-				array(
-					'viewport' => array( 1024, 0 ),
-					'sizes'    => array( array( 970, 250 ), array( 970, 90 ), array( 728, 90 ) ),
-				),
-				array(
-					'viewport' => array( 768, 0 ),
-					'sizes'    => array( array( 728, 90 ) ),
-				),
-				array(
-					'viewport' => array( 0, 0 ),
-					'sizes'    => array( array( 320, 100 ), array( 320, 50 ) ),
-				),
+			'schemaVersion' => HIP_Ad_Schema::VERSION,
+			'adsEnabled' => (bool) $settings['ads_enabled'],
+			'networkCode' => $settings['network_code'],
+			'propertyCode' => $settings['property_code'],
+			'siteName' => $settings['property_code'],
+			'gpt' => array(
+				'singleRequest' => (bool) $settings['enable_single_request'],
+				'collapseEmpty' => (bool) $settings['collapse_empty'],
+				'lazyLoad' => $settings['enable_lazy_load'] ? array(
+					'fetchMarginPercent'  => (int) $settings['lazy_fetch_margin'],
+					'renderMarginPercent' => (int) $settings['lazy_render_margin'],
+					'mobileScaling'       => (float) $settings['lazy_mobile_scaling'],
+				) : null,
 			),
-			'mpu'            => array(
-				array(
-					'viewport' => array( 768, 0 ),
-					'sizes'    => array( array( 300, 600 ), array( 300, 250 ), array( 336, 280 ) ),
-				),
-				array(
-					'viewport' => array( 0, 0 ),
-					'sizes'    => array( array( 300, 250 ) ),
-				),
-			),
-			'skyscraper'     => array(
-				array(
-					'viewport' => array( 1024, 0 ),
-					'sizes'    => array( array( 160, 600 ), array( 120, 600 ) ),
-				),
-				array(
-					'viewport' => array( 0, 0 ),
-					'sizes'    => array(),
-				),
-			),
-			'mobile_sticky'  => array(
-				array(
-					'viewport' => array( 0, 0 ),
-					'sizes'    => array( array( 320, 50 ), array( 320, 100 ) ),
-				),
-			),
+			'globalTargeting' => $settings['global_targeting'],
+			'cacheTtl' => (int) $settings['cache_duration'],
+			'debug' => (bool) $settings['debug_mode'],
 		);
 	}
 }
