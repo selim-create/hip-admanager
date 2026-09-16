@@ -188,7 +188,6 @@ class HIP_Ad_Importer {
 	}
 
 	private function merge_import( $existing, $incoming ) {
-		// GAM-owned fields are updated; editorial/delivery overrides are preserved.
 		$existing['name'] = $incoming['name'] ?: $existing['name'];
 		$existing['inventory_id'] = $incoming['inventory_id'] ?: $existing['inventory_id'];
 		$existing['ad_unit_path'] = $incoming['ad_unit_path'];
@@ -284,17 +283,41 @@ class HIP_Ad_Importer {
 	private function mapping_for( $group, $device, $sizes ) {
 		$presets = HIP_Ad_Schema::size_presets();
 		if ( 'mobile' === $device || 'overlay' === $group ) {
-			return isset( $presets['mobile_sticky'] ) ? $presets['mobile_sticky'] : array();
+			$preset = isset( $presets['mobile_sticky'] ) ? $presets['mobile_sticky'] : array();
+		} elseif ( 'header' === $group ) {
+			$preset = $presets['leaderboard'];
+		} elseif ( 'sidebar' === $group ) {
+			$preset = $presets['skyscraper'];
+		} elseif ( 'content' === $group ) {
+			$preset = $presets['mpu'];
+		} else {
+			$preset = array( array( 'viewport' => array( 0, 0 ), 'sizes' => $sizes ) );
 		}
-		if ( 'header' === $group ) {
-			return $presets['leaderboard'];
+		return $this->filter_mapping_sizes( $preset, $sizes );
+	}
+
+	private function filter_mapping_sizes( $mappings, $declared_sizes ) {
+		$allowed = array();
+		foreach ( HIP_Ad_Schema::normalize_sizes( $declared_sizes ) as $size ) {
+			$allowed[ $size[0] . 'x' . $size[1] ] = true;
 		}
-		if ( 'sidebar' === $group ) {
-			return $presets['skyscraper'];
+		$result = array();
+		foreach ( (array) $mappings as $mapping ) {
+			$mapped = isset( $mapping['sizes'] ) ? HIP_Ad_Schema::normalize_sizes( $mapping['sizes'] ) : array();
+			if ( empty( $mapped ) ) {
+				$result[] = array( 'viewport' => $mapping['viewport'], 'sizes' => array() );
+				continue;
+			}
+			$mapped = array_values( array_filter( $mapped, function( $size ) use ( $allowed ) {
+				return isset( $allowed[ $size[0] . 'x' . $size[1] ] );
+			} ) );
+			if ( ! empty( $mapped ) ) {
+				$result[] = array( 'viewport' => $mapping['viewport'], 'sizes' => $mapped );
+			}
 		}
-		if ( 'content' === $group ) {
-			return $presets['mpu'];
+		if ( empty( $result ) && ! empty( $declared_sizes ) ) {
+			$result[] = array( 'viewport' => array( 0, 0 ), 'sizes' => HIP_Ad_Schema::normalize_sizes( $declared_sizes ) );
 		}
-		return array( array( 'viewport' => array( 0, 0 ), 'sizes' => $sizes ) );
+		return $result;
 	}
 }
