@@ -75,9 +75,8 @@ class HIP_Ad_Repository {
 	}
 
 	public static function active( $args = array() ) {
-		$args['status'] = 'active';
-		$slots = self::all( $args );
-		return array_values( array_filter( $slots, array( __CLASS__, 'is_live' ) ) );
+		unset( $args['status'] );
+		return array_values( array_filter( self::all( $args ), array( __CLASS__, 'is_live' ) ) );
 	}
 
 	public static function save( $input, $post_id = 0 ) {
@@ -143,11 +142,15 @@ class HIP_Ad_Repository {
 		if ( ! $slot ) {
 			return new WP_Error( 'slot_not_found', __( 'Ad slot not found.', 'hip-admanager' ) );
 		}
+
 		$slot['id'] = 0;
 		$slot['name'] .= ' ' . __( 'Copy', 'hip-admanager' );
 		$slot['key'] = self::unique_key( $slot['key'] . '_copy' );
 		$slot['placement_key'] = $slot['key'];
-		$slot['ad_unit_path'] = $slot['ad_unit_path'] . '-copy';
+		$slot['inventory_id'] = '';
+		$slot['ad_unit_path'] = rtrim( $slot['ad_unit_path'], '/' ) . '_copy';
+		$slot['status'] = 'paused';
+		$slot['notes'] = trim( $slot['notes'] . "\n" . __( 'Duplicated slot. Review the GAM path before activating.', 'hip-admanager' ) );
 		return self::save( $slot );
 	}
 
@@ -207,6 +210,7 @@ class HIP_Ad_Repository {
 		$issues = array();
 		$keys = array();
 		$paths = array();
+
 		foreach ( $slots as $slot ) {
 			$validation = HIP_Ad_Schema::validate_slot( $slot );
 			foreach ( $validation->get_error_messages() as $message ) {
@@ -216,11 +220,16 @@ class HIP_Ad_Repository {
 				$issues[] = array( 'level' => 'error', 'slot_id' => $slot['id'], 'slot' => $slot['name'], 'message' => __( 'Duplicate slot key.', 'hip-admanager' ) );
 			}
 			$keys[ $slot['key'] ] = true;
+
 			if ( $slot['ad_unit_path'] && isset( $paths[ $slot['ad_unit_path'] ] ) ) {
 				$issues[] = array( 'level' => 'error', 'slot_id' => $slot['id'], 'slot' => $slot['name'], 'message' => __( 'Duplicate GAM ad unit path.', 'hip-admanager' ) );
 			}
 			if ( $slot['ad_unit_path'] ) {
 				$paths[ $slot['ad_unit_path'] ] = true;
+			}
+
+			if ( 'scheduled' === $slot['status'] && ! $slot['schedule']['start'] && ! $slot['schedule']['end'] ) {
+				$issues[] = array( 'level' => 'warning', 'slot_id' => $slot['id'], 'slot' => $slot['name'], 'message' => __( 'Scheduled slot has no start or end date.', 'hip-admanager' ) );
 			}
 			if ( $slot['refresh']['enabled'] && ! $slot['refresh']['require_visible'] ) {
 				$issues[] = array( 'level' => 'warning', 'slot_id' => $slot['id'], 'slot' => $slot['name'], 'message' => __( 'Refresh is enabled without a visibility requirement.', 'hip-admanager' ) );
@@ -232,11 +241,11 @@ class HIP_Ad_Repository {
 	public static function stats() {
 		$slots = self::all();
 		$stats = array(
-			'total' => count( $slots ),
-			'active' => 0,
-			'paused' => 0,
+			'total'     => count( $slots ),
+			'active'    => 0,
+			'paused'    => 0,
 			'scheduled' => 0,
-			'groups' => array(),
+			'groups'    => array(),
 		);
 		foreach ( $slots as $slot ) {
 			if ( isset( $stats[ $slot['status'] ] ) ) {
@@ -269,8 +278,8 @@ class HIP_Ad_Repository {
 			$categories = $display_rules['categories'];
 		}
 
-		$min_height = self::decode_meta( get_post_meta( $post->ID, '_hip_ad_min_height', true ), array() );
 		$sizes = self::decode_meta( get_post_meta( $post->ID, 'gam_sizes', true ), array() );
+		$min_height = self::decode_meta( get_post_meta( $post->ID, '_hip_ad_min_height', true ), array() );
 		if ( empty( $min_height ) ) {
 			$computed = HIP_Ad_Schema::compute_min_height( $sizes );
 			$min_height = array( 'desktop' => $computed, 'tablet' => $computed, 'mobile' => min( $computed, 280 ) );
@@ -285,11 +294,11 @@ class HIP_Ad_Repository {
 		}
 
 		$refresh = array(
-			'enabled' => get_post_meta( $post->ID, '_hip_ad_refresh_enabled', true ),
-			'trigger' => get_post_meta( $post->ID, '_hip_ad_refresh_trigger', true ) ?: 'time',
-			'interval' => get_post_meta( $post->ID, '_hip_ad_refresh_interval', true ) ?: 30,
-			'max_refreshes' => get_post_meta( $post->ID, '_hip_ad_max_refreshes', true ) ?: 0,
-			'require_visible' => '' !== get_post_meta( $post->ID, '_hip_ad_refresh_visible', true ) ? get_post_meta( $post->ID, '_hip_ad_refresh_visible', true ) : true,
+			'enabled'           => get_post_meta( $post->ID, '_hip_ad_refresh_enabled', true ),
+			'trigger'           => get_post_meta( $post->ID, '_hip_ad_refresh_trigger', true ) ?: 'time',
+			'interval'          => get_post_meta( $post->ID, '_hip_ad_refresh_interval', true ) ?: 30,
+			'max_refreshes'     => get_post_meta( $post->ID, '_hip_ad_max_refreshes', true ) ?: 0,
+			'require_visible'   => '' !== get_post_meta( $post->ID, '_hip_ad_refresh_visible', true ) ? get_post_meta( $post->ID, '_hip_ad_refresh_visible', true ) : true,
 			'pause_when_hidden' => '' !== get_post_meta( $post->ID, '_hip_ad_refresh_pause_hidden', true ) ? get_post_meta( $post->ID, '_hip_ad_refresh_pause_hidden', true ) : true,
 		);
 
@@ -323,53 +332,54 @@ class HIP_Ad_Repository {
 			'refresh'         => $refresh,
 			'notes'           => get_post_meta( $post->ID, '_hip_ad_notes', true ),
 		);
+
 		$slot = HIP_Ad_Schema::normalize_slot( $slot );
 		return apply_filters( 'hip_ad_slot_data', $slot, $post->ID );
 	}
 
 	public static function is_live( $slot ) {
-		if ( 'active' !== $slot['status'] && 'scheduled' !== $slot['status'] ) {
+		if ( ! in_array( $slot['status'], array( 'active', 'scheduled' ), true ) ) {
 			return false;
 		}
-		$now = current_time( 'timestamp', true );
-		if ( $slot['schedule']['start'] ) {
-			$start = strtotime( $slot['schedule']['start'] );
-			if ( $start && $now < $start ) {
-				return false;
-			}
-		if ( $slot['schedule']['end'] ) {
-			$end = strtotime( $slot['schedule']['end'] );
-			if ( $end && $now > $end ) {
-				return false;
-			}
+
+		$now = time();
+		$start = $slot['schedule']['start'] ? strtotime( $slot['schedule']['start'] ) : false;
+		$end = $slot['schedule']['end'] ? strtotime( $slot['schedule']['end'] ) : false;
+
+		if ( $start && $now < $start ) {
+			return false;
+		}
+		if ( $end && $now > $end ) {
+			return false;
+		}
 		return true;
 	}
 
 	public static function api_slot( $slot ) {
 		return array(
-			'id'                => (int) $slot['id'],
-			'key'               => $slot['key'],
-			'name'              => $slot['name'],
-			'slotId'            => $slot['key'],
-			'legacySlotId'      => $slot['legacy_slot_id'],
-			'inventoryId'       => $slot['inventory_id'],
-			'adUnitPath'        => $slot['ad_unit_path'],
-			'placement'         => $slot['placement_key'],
-			'placementKey'      => $slot['placement_key'],
-			'placementGroup'    => $slot['placement_group'],
-			'device'            => $slot['device'],
-			'priority'          => (int) $slot['priority'],
-			'sizes'             => $slot['sizes'],
-			'sizeMappings'      => $slot['size_mappings'],
-			'targeting'         => $slot['targeting'],
-			'pageTypes'         => $slot['page_types'],
-			'categories'        => $slot['categories'],
-			'lazyLoad'          => (bool) $slot['lazy_load'],
-			'collapseEmpty'     => (bool) $slot['collapse_empty'],
-			'minHeight'         => max( $slot['min_height'] ),
+			'id'                  => (int) $slot['id'],
+			'key'                 => $slot['key'],
+			'name'                => $slot['name'],
+			'slotId'              => $slot['key'],
+			'legacySlotId'        => $slot['legacy_slot_id'],
+			'inventoryId'         => $slot['inventory_id'],
+			'adUnitPath'          => $slot['ad_unit_path'],
+			'placement'           => $slot['placement_key'],
+			'placementKey'        => $slot['placement_key'],
+			'placementGroup'      => $slot['placement_group'],
+			'device'              => $slot['device'],
+			'priority'            => (int) $slot['priority'],
+			'sizes'               => $slot['sizes'],
+			'sizeMappings'        => $slot['size_mappings'],
+			'targeting'           => $slot['targeting'],
+			'pageTypes'           => $slot['page_types'],
+			'categories'          => $slot['categories'],
+			'lazyLoad'            => (bool) $slot['lazy_load'],
+			'collapseEmpty'       => (bool) $slot['collapse_empty'],
+			'minHeight'           => max( $slot['min_height'] ),
 			'responsiveMinHeight' => $slot['min_height'],
-			'schedule'          => $slot['schedule'],
-			'refresh'           => $slot['refresh'],
+			'schedule'            => $slot['schedule'],
+			'refresh'             => $slot['refresh'],
 		);
 	}
 
@@ -419,9 +429,13 @@ class HIP_Ad_Repository {
 			'gam_display_rules'            => wp_json_encode( array(
 				'page_types' => $slot['page_types'],
 				'categories' => $slot['categories'],
-				'schedule'   => array( 'start_date' => $slot['schedule']['start'], 'end_date' => $slot['schedule']['end'] ),
+				'schedule'   => array(
+					'start_date' => $slot['schedule']['start'],
+					'end_date'   => $slot['schedule']['end'],
+				),
 			) ),
 		);
+
 		foreach ( $meta as $key => $value ) {
 			update_post_meta( $post_id, $key, $value );
 		}
